@@ -176,6 +176,7 @@
             <a href="#endpoints">6. API 列表</a>
             <a href="#anthropic">7. Anthropic /v1/messages 兼容范围</a>
             <a href="#models">8. 模型组白名单</a>
+            <a href="#gpt">8.1 GPT/Codex 模型</a>
             <a href="#tools">9. Tools / Tool result 映射</a>
             <a href="#stream">10. 流式 (SSE) 说明</a>
             <a href="#claudecode">11. Claude Code 接入建议</a>
@@ -310,6 +311,19 @@ REQUEST_TIMEOUT_MS=60000</code></pre>
                 <li>请求中的 <span class="kbd">model</span> 必须在白名单内，否则返回 400</li>
                 <li>支持 thinking 后缀策略：当请求里出现 <span class="kbd">thinking: {type:"enabled"}</span> 且存在 <span class="kbd">-thinking</span> 变体，会自动切换</li>
               </ul>
+            </section>
+
+            <section id="gpt">
+              <h3>8.1 GPT/Codex 模型</h3>
+              <p>MyRouter 的“允许模型”本质上是白名单：只决定哪些 <span class="kbd">model</span> 名称可以通过网关。</p>
+              <ul>
+                <li>如果你的上游站同时支持 GPT/Codex 模型名，你可以在 <span class="kbd">/admin</span> 里把它们追加到 Allowed Models。</li>
+                <li>管理台提供了一个快捷按钮：<b>追加 GPT/Codex</b>，会添加一组常见模型名。</li>
+                <li>如果上游不支持某个模型名，请求仍会返回 <span class="kbd">upstream_error</span>（这属于上游能力问题，不是网关白名单问题）。</li>
+              </ul>
+              <div class="note">
+                提醒：不同上游站的模型命名可能不一致（例如是否包含版本后缀）。以你上游的 <span class="kbd">/v1/models</span> 或文档为准。
+              </div>
             </section>
 
             <section id="tools">

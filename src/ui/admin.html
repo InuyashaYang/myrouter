@@ -356,7 +356,12 @@
                     <label>允许模型</label>
                     <div>
                       <textarea id="allowedModels" placeholder="一行一个模型；留空=使用默认组"></textarea>
+                      <div class="btns" style="margin-top: 8px;">
+                        <button class="btn" type="button" id="btnPresetAddGpt">追加 GPT/Codex</button>
+                        <button class="btn" type="button" id="btnPresetUseDefault">清空并用默认</button>
+                      </div>
                       <div class="hint" id="lockAllowedModels"></div>
+                      <div class="hint">提示：这里只是“模型名白名单”。上游若不支持该模型名，仍会返回 upstream_error。</div>
                     </div>
                   </div>
 
@@ -691,6 +696,35 @@
       $("btnSave").addEventListener("click", () => saveConfig().catch((e) => ($("saveStatus").textContent = String(e))));
       $("btnClearKey").addEventListener("click", () => saveConfig({ clearUpstreamKey: true }).catch((e) => ($("saveStatus").textContent = String(e))));
       $("btnTest").addEventListener("click", () => testOnce().catch((e) => { setTestState(false, "error"); $("testOutput").textContent = String(e); }));
+
+      const PRESET_GPT_CODEX = [
+        // OpenAI GPT/Codex common ids (adjust to your upstream support)
+        "gpt-4o",
+        "gpt-4o-mini",
+        "gpt-4.1",
+        "gpt-4.1-mini",
+        "gpt-4.1-nano",
+        "o1",
+        "o1-mini",
+        "o3-mini",
+        "codex-mini-latest"
+      ];
+
+      function mergeModelList(currentText, extraModels) {
+        const set = new Set(parseLinesOrCsv(currentText));
+        for (const m of extraModels) set.add(String(m).trim());
+        return Array.from(set).filter(Boolean).sort().join("\n");
+      }
+
+      $("btnPresetAddGpt").addEventListener("click", () => {
+        $("allowedModels").value = mergeModelList($("allowedModels").value, PRESET_GPT_CODEX);
+        $("saveStatus").textContent = "已追加 GPT/Codex 预置模型（别忘了保存）";
+      });
+
+      $("btnPresetUseDefault").addEventListener("click", () => {
+        $("allowedModels").value = "";
+        $("saveStatus").textContent = "已清空自定义模型列表，将使用默认白名单（别忘了保存）";
+      });
 
       $("btnFetchDocs").addEventListener("click", async () => {
         try {

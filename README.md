@@ -81,6 +81,13 @@ Runtime config file path:
 
 Example config: `config.runtime.example.json`
 
+## Adding GPT/Codex models
+
+MyRouter uses an allowlist: it only checks that the requested `model` is allowed.
+If your upstream also supports GPT/Codex-style model ids, add them in `/admin` -> Allowed Models.
+
+Tip: the Admin UI has a button to append a common GPT/Codex preset list.
+
 ### Environment Variables
 
 ```text
