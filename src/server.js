@@ -120,15 +120,21 @@ app.put("/admin/config", async (req, reply) => {
     return;
   }
 
-  await configManager.update({
-    // Legacy fields (global)
-    upstreamBaseUrl: body.upstreamBaseUrl,
-    upstreamApiKey: body.upstreamApiKey,
-    localApiKeys: body.localApiKeys,
-    allowedModels: body.allowedModels,
-    requestTimeoutMs: body.requestTimeoutMs,
-    disableStreaming: body.disableStreaming
-  });
+  // Only apply fields explicitly provided in request body.
+  // This prevents accidental wiping (e.g. sending only upstreamApiKey would clear upstreamBaseUrl).
+  const patch = {};
+  for (const k of [
+    "upstreamBaseUrl",
+    "upstreamApiKey",
+    "localApiKeys",
+    "allowedModels",
+    "requestTimeoutMs",
+    "disableStreaming"
+  ]) {
+    if (Object.prototype.hasOwnProperty.call(body, k)) patch[k] = body[k];
+  }
+
+  await configManager.update(patch);
 
   reply.send({ ok: true });
 });
