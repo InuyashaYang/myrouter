@@ -143,6 +143,15 @@ app.put("/admin/config", async (req, reply) => {
   }
 
   await configManager.update({
+    // Legacy fields (global)
+    upstreamBaseUrl: body.upstreamBaseUrl,
+    upstreamApiKey: body.upstreamApiKey,
+    localApiKeys: body.localApiKeys,
+    allowedModels: body.allowedModels,
+    requestTimeoutMs: body.requestTimeoutMs,
+    disableStreaming: body.disableStreaming,
+
+    // Profile-based fields
     defaultProfile: body.defaultProfile,
     apiKeys: body.apiKeys,
     profiles: body.profiles,
