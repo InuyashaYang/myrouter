@@ -4,6 +4,7 @@ gateway.err.log
 .gateway.port
 .gateway.pid
 config.runtime.json
+.lnk
 .env
 .DS_Store
 npm-debug.log*

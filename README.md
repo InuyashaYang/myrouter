@@ -17,7 +17,7 @@ Designed for: using a single local endpoint to power tools like Claude Code / Op
 
 1) Install Node.js (v20+ recommended; v22 tested)
 
-2) Double-click `MyRouter.cmd`
+2) Double-click `Start-MyRouter.cmd`
 
 - It starts the gateway in background and opens `http://127.0.0.1:8787/admin`
 - Configure `Upstream Base URL` + `Upstream API Key` in the UI and Save
@@ -32,6 +32,20 @@ Logs:
 
 - `gateway.out.log`
 - `gateway.err.log`
+
+### Pretty icon (Windows shortcut)
+
+Windows `.cmd` files can't have a real icon. To get a nice icon, create a Desktop shortcut:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install_shortcut.ps1 -Name "MyRouter"
+```
+
+Optionally set your own `.ico`:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install_shortcut.ps1 -Name "MyRouter" -IconPath "C:\\path\\to\\icon.ico"
+```
 
 ## Run (Manual)
 
