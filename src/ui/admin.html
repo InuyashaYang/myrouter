@@ -507,21 +507,49 @@
       async function loadConfig() {
         saveSession();
         $("saveStatus").textContent = "loading…";
-        $("saveStatus").textContent = "提示：已禁用 Admin API。请手动编辑 config.runtime.json 后重启服务。";
-        currentConfig = null;
-        $("metaTag").textContent = "config.runtime.json";
-        setCfgState(true, "manual");
+        const res = await fetch("/admin/config");
+        if (!res.ok) {
+          const t = await res.text();
+          $("saveStatus").textContent = `加载失败 HTTP ${res.status}: ${t}`;
+          currentConfig = null;
+          setCfgState(false, "error");
+          return;
+        }
+        const data = await res.json();
+        currentConfig = data;
+
+        $("metaTag").textContent =
+          data.meta && data.meta.runtimeConfigPath ? data.meta.runtimeConfigPath : "ready";
+
+        $("upstreamBaseUrl").value = data.upstreamBaseUrl || "";
+        $("upstreamApiKey").value = "";
+        $("upstreamApiKeyHint").textContent = data.upstreamApiKeyHint || "";
+
+        $("localApiKeys").value = (data.localApiKeys || []).join("\n");
+        $("allowedModels").value = (data.allowedModels || []).join("\n");
+        $("requestTimeoutMs").value = String(data.requestTimeoutMs || "");
+        $("disableStreaming").checked = !!data.disableStreaming;
+
+        const locks = (data.meta && data.meta.envLocks) || {};
+        setLockHint($("lockUpstreamBaseUrl"), !!locks.upstreamBaseUrl, "UPSTREAM_BASE_URL");
+        setLockHint($("lockUpstreamApiKey"), !!locks.upstreamApiKey, "UPSTREAM_API_KEY");
+        setLockHint($("lockLocalApiKeys"), !!locks.localApiKeys, "LOCAL_API_KEYS");
+        setLockHint($("lockAllowedModels"), !!locks.allowedModels, "ALLOWED_MODELS");
+        setLockHint($("lockRequestTimeoutMs"), !!locks.requestTimeoutMs, "REQUEST_TIMEOUT_MS");
+        setLockHint($("lockDisableStreaming"), !!locks.disableStreaming, "DISABLE_STREAMING");
+
+        const ok = !!data.configured;
+        setCfgState(ok, ok ? "configured" : "not configured");
+        $("saveStatus").textContent = "ok";
       }
 
       async function saveConfig({ clearUpstreamKey } = {}) {
         saveSession();
-        $("saveStatus").textContent = "已禁用 Admin API：无法在页面保存。请手动编辑 config.runtime.json 后重启服务。";
-        return;
+        $("saveStatus").textContent = "saving…";
 
         const payload = {
           upstreamBaseUrl: $("upstreamBaseUrl").value.trim(),
           localApiKeys: parseLinesOrCsv($("localApiKeys").value),
-          adminApiKeys: parseLinesOrCsv($("adminApiKeys").value),
           allowedModels: parseLinesOrCsv($("allowedModels").value),
           requestTimeoutMs: parseInt($("requestTimeoutMs").value.trim() || "60000", 10),
           disableStreaming: !!$("disableStreaming").checked
@@ -536,10 +564,7 @@
 
         const res = await fetch("/admin/config", {
           method: "PUT",
-          headers: {
-            ...adminHeaders(),
-            "content-type": "application/json"
-          },
+          headers: { "content-type": "application/json" },
           body: JSON.stringify(payload)
         });
 

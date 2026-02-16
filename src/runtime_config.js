@@ -15,6 +15,9 @@ export async function createRuntimeConfigManager({ runtimeConfigPath, envOverrid
     getEffective() {
       return effective;
     },
+    getFileConfig() {
+      return fileConfig;
+    },
     getMeta() {
       return {
         runtimeConfigPath,
@@ -23,6 +26,12 @@ export async function createRuntimeConfigManager({ runtimeConfigPath, envOverrid
     },
     async update(partialUpdate) {
       fileConfig = applyUpdate(fileConfig, partialUpdate);
+      await writeConfigFile(runtimeConfigPath, fileConfig);
+      effective = mergeEffective(fileConfig, envOverrides);
+      return effective;
+    },
+    async updateRaw(newConfig) {
+      fileConfig = normalizeRawConfig(newConfig);
       await writeConfigFile(runtimeConfigPath, fileConfig);
       effective = mergeEffective(fileConfig, envOverrides);
       return effective;
@@ -86,7 +95,94 @@ function applyUpdate(prev, patch) {
   if (Object.prototype.hasOwnProperty.call(patch, "disableStreaming")) {
     next.disableStreaming = !!patch.disableStreaming;
   }
+
+  if (Object.prototype.hasOwnProperty.call(patch, "defaultProfile")) {
+    next.defaultProfile = typeof patch.defaultProfile === "string" ? patch.defaultProfile : "";
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "apiKeys")) {
+    next.apiKeys = Array.isArray(patch.apiKeys) ? patch.apiKeys : [];
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "profiles")) {
+    next.profiles = patch.profiles && typeof patch.profiles === "object" ? patch.profiles : {};
+  }
+
+  // Profile-targeted update: { profileName, profilePatch: {...} }
+  if (patch && typeof patch === "object" && patch.profileName && patch.profilePatch && typeof patch.profilePatch === "object") {
+    const pn = String(patch.profileName);
+    const profiles = next.profiles && typeof next.profiles === "object" ? { ...next.profiles } : {};
+    const prevProfile = profiles[pn] && typeof profiles[pn] === "object" ? { ...profiles[pn] } : {};
+    const pp = patch.profilePatch;
+
+    if (Object.prototype.hasOwnProperty.call(pp, "wrapper")) {
+      prevProfile.wrapper = typeof pp.wrapper === "string" ? pp.wrapper : "";
+    }
+    if (Object.prototype.hasOwnProperty.call(pp, "upstreamBaseUrl")) {
+      prevProfile.upstreamBaseUrl = typeof pp.upstreamBaseUrl === "string" ? pp.upstreamBaseUrl : "";
+    }
+    if (Object.prototype.hasOwnProperty.call(pp, "upstreamApiKey")) {
+      // Allow keep sentinel
+      if (pp.upstreamApiKey === "__KEEP__") {
+        // no-op
+      } else {
+        prevProfile.upstreamApiKey = typeof pp.upstreamApiKey === "string" ? pp.upstreamApiKey : "";
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(pp, "allowedModels")) {
+      prevProfile.allowedModels = normalizeStringArray(pp.allowedModels);
+    }
+    if (Object.prototype.hasOwnProperty.call(pp, "requestTimeoutMs")) {
+      prevProfile.requestTimeoutMs = normalizeTimeout(pp.requestTimeoutMs);
+    }
+    if (Object.prototype.hasOwnProperty.call(pp, "disableStreaming")) {
+      prevProfile.disableStreaming = !!pp.disableStreaming;
+    }
+
+    profiles[pn] = prevProfile;
+    next.profiles = profiles;
+  }
+
   return next;
+}
+
+function normalizeRawConfig(value) {
+  const v = value && typeof value === "object" ? value : {};
+  const out = { ...v };
+
+  if (!Array.isArray(out.apiKeys)) out.apiKeys = [];
+  out.apiKeys = out.apiKeys
+    .filter((k) => k && typeof k === "object")
+    .map((k) => ({
+      key: typeof k.key === "string" ? k.key : "",
+      profile: typeof k.profile === "string" ? k.profile : ""
+    }))
+    .filter((k) => k.key && k.profile);
+
+  if (!out.profiles || typeof out.profiles !== "object") out.profiles = {};
+  const nextProfiles = {};
+  for (const [name, p] of Object.entries(out.profiles)) {
+    if (!p || typeof p !== "object") continue;
+    nextProfiles[name] = {
+      wrapper: typeof p.wrapper === "string" ? p.wrapper : "anthropic_messages",
+      upstreamBaseUrl: typeof p.upstreamBaseUrl === "string" ? p.upstreamBaseUrl : "",
+      upstreamApiKey: typeof p.upstreamApiKey === "string" ? p.upstreamApiKey : "",
+      allowedModels: normalizeStringArray(p.allowedModels),
+      requestTimeoutMs: normalizeTimeout(p.requestTimeoutMs),
+      disableStreaming: !!p.disableStreaming
+    };
+  }
+  out.profiles = nextProfiles;
+
+  if (typeof out.defaultProfile !== "string") out.defaultProfile = "";
+
+  // Legacy fields
+  if (typeof out.upstreamBaseUrl !== "string") out.upstreamBaseUrl = "";
+  if (typeof out.upstreamApiKey !== "string") out.upstreamApiKey = "";
+  out.localApiKeys = normalizeStringArray(out.localApiKeys);
+  out.allowedModels = normalizeStringArray(out.allowedModels);
+  out.requestTimeoutMs = normalizeTimeout(out.requestTimeoutMs);
+  out.disableStreaming = !!out.disableStreaming;
+
+  return out;
 }
 
 async function readConfigFile(runtimeConfigPath) {
