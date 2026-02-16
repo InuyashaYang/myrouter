@@ -73,56 +73,34 @@ export async function pipeOpenAIStreamToAnthropic({
 
     if (Array.isArray(delta.tool_calls)) {
       ensureMessageStart();
-      // Some clients are sensitive to content block ordering; ensure index 0 exists.
       ensureTextBlockStart();
       for (const tc of delta.tool_calls) {
         if (!tc || typeof tc.index !== "number") continue;
         const toolIndex = tc.index;
-        const eventIndex = 1 + toolIndex;
 
         const prev = toolStates.get(toolIndex) || {
-          started: false,
           id: "",
           name: "",
           argsBuf: ""
         };
 
         const id = tc.id || prev.id || randomId("toolu");
-        const name =
-          (tc.function && tc.function.name) || prev.name || "";
-
+        const name = (tc.function && tc.function.name) || prev.name || "";
         const argChunk =
           tc.function && typeof tc.function.arguments === "string"
             ? tc.function.arguments
             : "";
 
-        if (!prev.started) {
-          toolStates.set(toolIndex, { started: true, id, name, argsBuf: prev.argsBuf + argChunk });
-          writeEvent(replyRaw, "content_block_start", {
-            type: "content_block_start",
-            index: eventIndex,
-            content_block: { type: "tool_use", id, name, input: {} }
-          });
-        } else {
-          toolStates.set(toolIndex, { started: true, id, name, argsBuf: prev.argsBuf + argChunk });
-        }
+        toolStates.set(toolIndex, {
+          id,
+          name,
+          argsBuf: prev.argsBuf + argChunk
+        });
       }
     }
   }
 
   ensureMessageStart();
-
-  // Flush tool arguments as a single complete JSON blob per tool.
-  // This avoids clients trying to JSON.parse partial fragments and losing required fields.
-  for (const [toolIndex, st] of toolStates) {
-    const eventIndex = 1 + toolIndex;
-    const partialJson = (st && typeof st.argsBuf === "string" && st.argsBuf.trim()) ? st.argsBuf : "{}";
-    writeEvent(replyRaw, "content_block_delta", {
-      type: "content_block_delta",
-      index: eventIndex,
-      delta: { type: "input_json_delta", partial_json: partialJson }
-    });
-  }
 
   if (sentTextStart) {
     writeEvent(replyRaw, "content_block_stop", {
@@ -130,10 +108,36 @@ export async function pipeOpenAIStreamToAnthropic({
       index: 0
     });
   }
-  for (const [toolIndex] of toolStates) {
+
+  // Emit tool blocks only once we have complete, valid JSON.
+  // This prevents clients from attempting to parse partial fragments.
+  const toolIndices = Array.from(toolStates.keys()).sort((a, b) => a - b);
+  for (const toolIndex of toolIndices) {
+    const st = toolStates.get(toolIndex);
+    if (!st || !st.name) continue;
+
+    const rawArgs = (st.argsBuf || "").trim();
+    const parsed = safeJsonParse(rawArgs || "{}");
+    if (!parsed.ok || typeof parsed.value !== "object" || parsed.value === null) {
+      continue;
+    }
+
+    const eventIndex = 1 + toolIndex;
+    writeEvent(replyRaw, "content_block_start", {
+      type: "content_block_start",
+      index: eventIndex,
+      content_block: { type: "tool_use", id: st.id, name: st.name, input: {} }
+    });
+
+    writeEvent(replyRaw, "content_block_delta", {
+      type: "content_block_delta",
+      index: eventIndex,
+      delta: { type: "input_json_delta", partial_json: JSON.stringify(parsed.value) }
+    });
+
     writeEvent(replyRaw, "content_block_stop", {
       type: "content_block_stop",
-      index: 1 + toolIndex
+      index: eventIndex
     });
   }
 
@@ -163,6 +167,7 @@ async function* iterateOpenAISSE(upstreamResponse) {
 
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
+  let dataLines = [];
 
   while (true) {
     const { value, done } = await reader.read();
@@ -171,20 +176,40 @@ async function* iterateOpenAISSE(upstreamResponse) {
 
     let idx;
     while ((idx = buffer.indexOf("\n")) !== -1) {
-      const line = buffer.slice(0, idx).replace(/\r$/, "");
+      let line = buffer.slice(0, idx);
       buffer = buffer.slice(idx + 1);
 
-      if (!line) continue;
-      if (line.startsWith(":")) continue;
-      if (!line.startsWith("data:")) continue;
+      line = line.replace(/\r$/, "");
 
-      const raw = line.slice(5).trim();
-      if (raw === "[DONE]") {
-        yield "[DONE]";
-        return;
+      // SSE event boundary
+      if (line === "") {
+        if (dataLines.length) {
+          const raw = dataLines.join("\n").trim();
+          dataLines = [];
+          if (raw === "[DONE]") {
+            yield "[DONE]";
+            return;
+          }
+          const parsed = safeJsonParse(raw);
+          if (parsed.ok) yield parsed.value;
+        }
+        continue;
       }
-      const parsed = safeJsonParse(raw);
-      if (parsed.ok) yield parsed.value;
+
+      if (line.startsWith(":")) continue;
+      if (line.startsWith("data:")) {
+        dataLines.push(line.slice(5).trim());
+      }
     }
+  }
+
+  if (dataLines.length) {
+    const raw = dataLines.join("\n").trim();
+    if (raw === "[DONE]") {
+      yield "[DONE]";
+      return;
+    }
+    const parsed = safeJsonParse(raw);
+    if (parsed.ok) yield parsed.value;
   }
 }
