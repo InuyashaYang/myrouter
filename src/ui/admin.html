@@ -292,7 +292,7 @@
             <button class="active" data-tab="config"><span>配置</span><span class="hint">/admin/config</span></button>
             <button data-tab="test"><span>测试</span><span class="hint">/v1/messages</span></button>
             <button data-tab="docs"><span>文档</span><span class="hint">内置</span></button>
-            <button data-tab="copy"><span>一键复制</span><span class="hint">给 AI</span></button>
+            <button data-tab="copy"><span>复制文档</span><span class="hint">一键复制</span></button>
           </div>
         </aside>
 
@@ -440,16 +440,16 @@
 
           <div class="pane" id="pane-copy">
             <section class="subcard">
-              <div class="hd"><h2>一键复制给 AI</h2></div>
+              <div class="hd"><h2>一键复制全部文档</h2><div class="small">复制 /docs 的完整内容（纯文本）</div></div>
               <div class="bd">
-                <div class="small">不会复制任何 secret（key 会被打码）。如果需要更详细的上下文，先点“刷新”获取最新配置。</div>
+                <div class="small">复制的是文档本身（来自 /docs），不包含你的 key 明文。</div>
                 <div style="height: 10px"></div>
                 <div class="btns">
-                  <button class="btn primary" id="btnGenPrompt">生成内容</button>
-                  <button class="btn primary" id="btnCopyPrompt">复制到剪贴板</button>
+                  <button class="btn primary" id="btnFetchDocs">抓取文档</button>
+                  <button class="btn primary" id="btnCopyDocs">复制到剪贴板</button>
                 </div>
                 <div style="height: 10px"></div>
-                <textarea id="aiPrompt" style="min-height: 360px" placeholder="点击“生成内容”"></textarea>
+                <textarea id="docsText" style="min-height: 360px" placeholder="点击“抓取文档”"></textarea>
                 <div class="hint" id="copyStatus"></div>
               </div>
             </section>
@@ -635,60 +635,12 @@
         }
       }
 
-      function maskHint(hint) {
-        if (!hint) return "unknown";
-        if (String(hint).startsWith("set")) return hint;
-        return "empty";
-      }
-
-      function buildAiPrompt() {
-        const c = currentConfig;
-        const models = (c && Array.isArray(c.allowedModels)) ? c.allowedModels : [];
-        const upstream = c && c.upstreamBaseUrl ? c.upstreamBaseUrl : "(not set)";
-        const upstreamKey = c ? maskHint(c.upstreamApiKeyHint) : "unknown";
-        const configured = c && c.configured ? "yes" : "no";
-
-        const lines = [];
-        lines.push("你是我的本地网关调试助手。请根据以下信息，帮我排查/扩展/生成对接示例。");
-        lines.push("");
-        lines.push("## 网关基本信息");
-        lines.push("- 项目: MyRouter (Local LLM Gateway)");
-        lines.push(`- Base URL: ${baseOrigin}`);
-        lines.push("- 对外协议: Anthropic Messages API");
-        lines.push(`- 关键接口: POST ${baseOrigin}/v1/messages`);
-        lines.push(`- 模型列表: GET ${baseOrigin}/v1/models`);
-        lines.push(`- 配置状态: configured=${configured}`);
-        lines.push(`- 上游: ${upstream}`);
-        lines.push(`- 上游 key: ${upstreamKey} (已打码，不提供明文)`);
-        lines.push("");
-        lines.push("## 我希望 AI 帮我做的事");
-        lines.push("- 生成一段最小可用的 PowerShell/Node/Python 调用示例，调用 /v1/messages");
-        lines.push("- 如果我描述报错，请解释可能原因并给出定位步骤");
-        lines.push("- 如果我要接入 Claude Code/第三方工具，请给出它应当填写的 base url / key / model");
-        lines.push("");
-        lines.push("## 可用模型（白名单）");
-        if (models.length) {
-          for (const m of models) lines.push(`- ${m}`);
-        } else {
-          lines.push("- (unknown)");
-        }
-        lines.push("");
-        lines.push("## 请求示例（Anthropic Messages API）");
-        lines.push("```json");
-        lines.push("{");
-        lines.push("  \"model\": \"claude-sonnet-4-5-20250929-thinking\",");
-        lines.push("  \"max_tokens\": 128,");
-        lines.push("  \"messages\": [");
-        lines.push("    {");
-        lines.push("      \"role\": \"user\",");
-        lines.push("      \"content\": [{ \"type\": \"text\", \"text\": \"say ok\" }]");
-        lines.push("    }");
-        lines.push("  ]");
-        lines.push("}");
-        lines.push("```");
-        lines.push("");
-        lines.push("注意：不要让我把任何 secret（上游 key）贴出来。");
-        return lines.join("\n");
+      async function fetchDocsPlainText() {
+        const res = await fetch("/docs", { cache: "no-store" });
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        const text = (doc && doc.body) ? doc.body.innerText : "";
+        return `MyRouter Docs (from ${baseOrigin}/docs)\n\n${(text || "").trim()}\n`;
       }
 
       async function copyText(text) {
@@ -697,7 +649,7 @@
           return true;
         } catch {
           try {
-            const ta = $("aiPrompt");
+            const ta = $("docsText");
             ta.focus();
             ta.select();
             document.execCommand("copy");
@@ -726,18 +678,21 @@
       $("btnClearKey").addEventListener("click", () => saveConfig({ clearUpstreamKey: true }).catch((e) => ($("saveStatus").textContent = String(e))));
       $("btnTest").addEventListener("click", () => testOnce().catch((e) => { setTestState(false, "error"); $("testOutput").textContent = String(e); }));
 
-      $("btnGenPrompt").addEventListener("click", async () => {
-        if (!currentConfig) {
-          await loadConfig().catch(() => {});
+      $("btnFetchDocs").addEventListener("click", async () => {
+        try {
+          $("copyStatus").textContent = "抓取中…";
+          const txt = await fetchDocsPlainText();
+          $("docsText").value = txt;
+          $("copyStatus").textContent = "已抓取";
+        } catch (e) {
+          $("copyStatus").textContent = `抓取失败: ${String(e)}`;
         }
-        $("aiPrompt").value = buildAiPrompt();
-        $("copyStatus").textContent = "已生成";
       });
 
-      $("btnCopyPrompt").addEventListener("click", async () => {
-        const txt = $("aiPrompt").value || "";
+      $("btnCopyDocs").addEventListener("click", async () => {
+        const txt = $("docsText").value || "";
         if (!txt.trim()) {
-          $("copyStatus").textContent = "没有内容可复制（先点“生成内容”）";
+          $("copyStatus").textContent = "没有内容可复制（先点“抓取文档”）";
           return;
         }
         const ok = await copyText(txt);
