@@ -22,12 +22,6 @@ export function enforceLocalAuthOrThrow(config, headers) {
   }
 }
 
-export function getAdminToken(headers) {
-  const xAdminKey = headers["x-admin-key"];
-  if (typeof xAdminKey === "string" && xAdminKey.trim()) return xAdminKey.trim();
-  return getAuthToken(headers);
-}
-
 export function isLoopbackAddress(addr) {
   if (!addr || typeof addr !== "string") return false;
   if (addr === "::1") return true;
@@ -36,23 +30,54 @@ export function isLoopbackAddress(addr) {
   return false;
 }
 
-export function enforceAdminAuthOrThrow({ adminApiKeys, listenHost, remoteAddress, headers }) {
-  const keys = Array.isArray(adminApiKeys) ? adminApiKeys : [];
-  if (keys.length === 0) {
-    // Bootstrap mode: only allow loopback when no admin key configured.
-    const ok = isLoopbackAddress(remoteAddress) && (listenHost === "127.0.0.1" || listenHost === "::1" || listenHost === "localhost");
-    if (ok) return;
-    const err = new Error("Admin key not configured");
-    err.statusCode = 401;
-    throw err;
-  }
+export function resolveProfileOrThrow({ config, headers }) {
+  const token = getAuthToken(headers);
 
-  const token = getAdminToken(headers);
-  if (!token || !keys.includes(token)) {
+  // Backward compatibility: if profiles are not configured, fall back to legacy localApiKeys.
+  if (!config || typeof config !== "object") {
     const err = new Error("Unauthorized");
     err.statusCode = 401;
     throw err;
   }
+
+  if (!config.profiles || typeof config.profiles !== "object") {
+    enforceLocalAuthOrThrow(config, headers);
+    const defaultProfileName = config.defaultProfile || "default";
+    const profile = {
+      name: defaultProfileName,
+      wrapper: "anthropic_messages",
+      upstreamBaseUrl: config.upstreamBaseUrl,
+      upstreamApiKey: config.upstreamApiKey,
+      allowedModels: config.allowedModels,
+      requestTimeoutMs: config.requestTimeoutMs,
+      disableStreaming: !!config.disableStreaming
+    };
+    return { profileName: defaultProfileName, profile };
+  }
+
+  const apiKeys = Array.isArray(config.apiKeys) ? config.apiKeys : [];
+  if (!token) {
+    const err = new Error("Unauthorized");
+    err.statusCode = 401;
+    throw err;
+  }
+
+  const mapping = apiKeys.find((k) => k && typeof k === "object" && k.key === token);
+  if (!mapping || !mapping.profile) {
+    const err = new Error("Unauthorized");
+    err.statusCode = 401;
+    throw err;
+  }
+
+  const profileName = String(mapping.profile);
+  const profile = config.profiles[profileName];
+  if (!profile || typeof profile !== "object") {
+    const err = new Error("Unauthorized");
+    err.statusCode = 401;
+    throw err;
+  }
+
+  return { profileName, profile };
 }
 
 export function randomId(prefix) {

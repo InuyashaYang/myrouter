@@ -35,7 +35,6 @@ function mergeEffective(fileConfig, envOverrides) {
     upstreamBaseUrl: "",
     upstreamApiKey: "",
     localApiKeys: [],
-    adminApiKeys: [],
     allowedModels: defaultAllowedModels(),
     requestTimeoutMs: 60000,
     disableStreaming: false
@@ -45,16 +44,19 @@ function mergeEffective(fileConfig, envOverrides) {
     upstreamBaseUrl: pickFirst(envOverrides.upstreamBaseUrl, fileConfig.upstreamBaseUrl, defaults.upstreamBaseUrl),
     upstreamApiKey: pickFirst(envOverrides.upstreamApiKey, fileConfig.upstreamApiKey, defaults.upstreamApiKey),
     localApiKeys: pickFirst(envOverrides.localApiKeys, fileConfig.localApiKeys, defaults.localApiKeys),
-    adminApiKeys: pickFirst(envOverrides.adminApiKeys, fileConfig.adminApiKeys, defaults.adminApiKeys),
     allowedModels: pickFirst(envOverrides.allowedModels, fileConfig.allowedModels, defaults.allowedModels),
     requestTimeoutMs: pickFirst(envOverrides.requestTimeoutMs, fileConfig.requestTimeoutMs, defaults.requestTimeoutMs),
     disableStreaming: pickFirst(envOverrides.disableStreaming, fileConfig.disableStreaming, defaults.disableStreaming)
   };
 
+  // Profile-based config (preferred)
+  merged.apiKeys = Array.isArray(fileConfig.apiKeys) ? fileConfig.apiKeys : null;
+  merged.profiles = fileConfig.profiles && typeof fileConfig.profiles === "object" ? fileConfig.profiles : null;
+  merged.defaultProfile = typeof fileConfig.defaultProfile === "string" ? fileConfig.defaultProfile : null;
+
   merged.upstreamBaseUrl = (typeof merged.upstreamBaseUrl === "string" ? merged.upstreamBaseUrl : "").replace(/\/$/, "");
   merged.upstreamApiKey = typeof merged.upstreamApiKey === "string" ? merged.upstreamApiKey : "";
   merged.localApiKeys = normalizeStringArray(merged.localApiKeys);
-  merged.adminApiKeys = normalizeStringArray(merged.adminApiKeys);
   merged.allowedModels = normalizeStringArray(merged.allowedModels);
   if (merged.allowedModels.length === 0) merged.allowedModels = defaultAllowedModels();
   merged.requestTimeoutMs = normalizeTimeout(merged.requestTimeoutMs);
@@ -74,9 +76,6 @@ function applyUpdate(prev, patch) {
   }
   if (Object.prototype.hasOwnProperty.call(patch, "localApiKeys")) {
     next.localApiKeys = normalizeStringArray(patch.localApiKeys);
-  }
-  if (Object.prototype.hasOwnProperty.call(patch, "adminApiKeys")) {
-    next.adminApiKeys = normalizeStringArray(patch.adminApiKeys);
   }
   if (Object.prototype.hasOwnProperty.call(patch, "allowedModels")) {
     next.allowedModels = normalizeStringArray(patch.allowedModels);
@@ -142,7 +141,6 @@ function getEnvLocks(envOverrides) {
     upstreamBaseUrl: envOverrides.upstreamBaseUrl !== null,
     upstreamApiKey: envOverrides.upstreamApiKey !== null,
     localApiKeys: envOverrides.localApiKeys !== null,
-    adminApiKeys: envOverrides.adminApiKeys !== null,
     allowedModels: envOverrides.allowedModels !== null,
     requestTimeoutMs: envOverrides.requestTimeoutMs !== null,
     disableStreaming: envOverrides.disableStreaming !== null

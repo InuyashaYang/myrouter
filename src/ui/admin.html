@@ -312,14 +312,6 @@
                 <div class="hd"><h2>配置</h2></div>
                 <div class="bd">
                   <div class="row">
-                    <label>Admin Key</label>
-                    <div>
-                      <input id="adminKey" type="password" placeholder="x-admin-key (保存到 sessionStorage)" />
-                      <div class="hint">用于访问管理 API（不影响 /v1/messages）。</div>
-                    </div>
-                  </div>
-
-                  <div class="row">
                     <label>上游 Base URL</label>
                     <div>
                       <input id="upstreamBaseUrl" type="text" placeholder="http://152.53.52.170:3003" />
@@ -341,14 +333,6 @@
                     <div>
                       <textarea id="localApiKeys" placeholder="local-key-1\nlocal-key-2"></textarea>
                       <div class="hint" id="lockLocalApiKeys"></div>
-                    </div>
-                  </div>
-
-                  <div class="row">
-                    <label>Admin API Keys</label>
-                    <div>
-                      <textarea id="adminApiKeys" placeholder="admin-key-1\nadmin-key-2"></textarea>
-                      <div class="hint" id="lockAdminApiKeys"></div>
                     </div>
                   </div>
 
@@ -477,7 +461,6 @@
     <script>
       const $ = (id) => document.getElementById(id);
 
-      const adminKeyEl = $("adminKey");
       const localKeyForTestEl = $("localKeyForTest");
       const baseOrigin = window.location.origin;
       $("baseUrl").textContent = baseOrigin;
@@ -485,22 +468,12 @@
       let currentConfig = null;
 
       function loadSession() {
-        const ak = sessionStorage.getItem("myrouter_admin_key") || "";
         const lk = sessionStorage.getItem("myrouter_local_key") || "";
-        adminKeyEl.value = ak;
         localKeyForTestEl.value = lk;
       }
 
       function saveSession() {
-        sessionStorage.setItem("myrouter_admin_key", adminKeyEl.value || "");
         sessionStorage.setItem("myrouter_local_key", localKeyForTestEl.value || "");
-      }
-
-      function adminHeaders() {
-        const h = {};
-        const k = (adminKeyEl.value || "").trim();
-        if (k) h["x-admin-key"] = k;
-        return h;
       }
 
       function localHeaders() {
@@ -534,48 +507,16 @@
       async function loadConfig() {
         saveSession();
         $("saveStatus").textContent = "loading…";
-        const res = await fetch("/admin/config", { headers: adminHeaders() });
-        if (!res.ok) {
-          const t = await res.text();
-          $("saveStatus").textContent = `加载失败 HTTP ${res.status}: ${t}`;
-          currentConfig = null;
-          setCfgState(false, "locked");
-          return;
-        }
-        const data = await res.json();
-        currentConfig = data;
-
-        $("metaTag").textContent =
-          data.meta && data.meta.runtimeConfigPath ? data.meta.runtimeConfigPath : "ready";
-
-        $("upstreamBaseUrl").value = data.upstreamBaseUrl || "";
-        $("upstreamApiKey").value = "";
-        $("upstreamApiKeyHint").textContent = data.upstreamApiKeyHint || "";
-
-        $("localApiKeys").value = (data.localApiKeys || []).join("\n");
-        $("adminApiKeys").value = (data.adminApiKeys || []).join("\n");
-
-        $("allowedModels").value = (data.allowedModels || []).join("\n");
-        $("requestTimeoutMs").value = String(data.requestTimeoutMs || "");
-        $("disableStreaming").checked = !!data.disableStreaming;
-
-        const locks = (data.meta && data.meta.envLocks) || {};
-        setLockHint($("lockUpstreamBaseUrl"), !!locks.upstreamBaseUrl, "UPSTREAM_BASE_URL");
-        setLockHint($("lockUpstreamApiKey"), !!locks.upstreamApiKey, "UPSTREAM_API_KEY");
-        setLockHint($("lockLocalApiKeys"), !!locks.localApiKeys, "LOCAL_API_KEYS");
-        setLockHint($("lockAdminApiKeys"), !!locks.adminApiKeys, "ADMIN_API_KEYS");
-        setLockHint($("lockAllowedModels"), !!locks.allowedModels, "ALLOWED_MODELS");
-        setLockHint($("lockRequestTimeoutMs"), !!locks.requestTimeoutMs, "REQUEST_TIMEOUT_MS");
-        setLockHint($("lockDisableStreaming"), !!locks.disableStreaming, "DISABLE_STREAMING");
-
-        const ok = !!data.configured;
-        setCfgState(ok, ok ? "configured" : "not configured");
-        $("saveStatus").textContent = "ok";
+        $("saveStatus").textContent = "提示：已禁用 Admin API。请手动编辑 config.runtime.json 后重启服务。";
+        currentConfig = null;
+        $("metaTag").textContent = "config.runtime.json";
+        setCfgState(true, "manual");
       }
 
       async function saveConfig({ clearUpstreamKey } = {}) {
         saveSession();
-        $("saveStatus").textContent = "saving…";
+        $("saveStatus").textContent = "已禁用 Admin API：无法在页面保存。请手动编辑 config.runtime.json 后重启服务。";
+        return;
 
         const payload = {
           upstreamBaseUrl: $("upstreamBaseUrl").value.trim(),
@@ -718,12 +659,12 @@
 
       $("btnPresetAddGpt").addEventListener("click", () => {
         $("allowedModels").value = mergeModelList($("allowedModels").value, PRESET_GPT_CODEX);
-        $("saveStatus").textContent = "已追加 GPT/Codex 预置模型（别忘了保存）";
+        $("saveStatus").textContent = "已追加 GPT/Codex 预置模型（请手动写入 config.runtime.json）";
       });
 
       $("btnPresetUseDefault").addEventListener("click", () => {
         $("allowedModels").value = "";
-        $("saveStatus").textContent = "已清空自定义模型列表，将使用默认白名单（别忘了保存）";
+        $("saveStatus").textContent = "已清空自定义模型列表（请手动写入 config.runtime.json）";
       });
 
       $("btnFetchDocs").addEventListener("click", async () => {

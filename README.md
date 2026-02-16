@@ -10,7 +10,7 @@ Designed for: using a single local endpoint to power tools like Claude Code / Op
 - Model allowlist (by group): request `model` must be allowed
 - Tools mapping: Anthropic `tools`/`tool_use`/`tool_result` -> OpenAI `tools`/`tool_calls`/`tool` role
 - Streaming: OpenAI SSE -> Anthropic event-stream (when upstream supports `stream:true`)
-- Built-in Admin UI (sidebar): configure upstream URL/key, local/admin keys, allowlist, timeout; test and docs inside
+- Built-in UI (sidebar): docs + test helper
 - Double-click launcher on Windows: auto-install deps (first run) and open Admin UI
 
 ## Quick Start (Windows)
@@ -20,7 +20,7 @@ Designed for: using a single local endpoint to power tools like Claude Code / Op
 2) Double-click `Start-MyRouter.cmd`
 
 - It starts the gateway in background and opens `http://127.0.0.1:8787/admin`
-- Configure `Upstream Base URL` + `Upstream API Key` in the UI and Save
+- Configure `config.runtime.json` manually (see below)
 
 Stop:
 
@@ -70,8 +70,8 @@ Default listen:
 
 MyRouter supports 3 sources (highest priority first):
 
-1) Environment variables (locks the field; UI changes won't override)
-2) Runtime config file: `config.runtime.json` (written by Admin UI)
+1) Environment variables (locks the field)
+2) Runtime config file: `config.runtime.json`
 3) Defaults
 
 Runtime config file path:
@@ -98,7 +98,6 @@ UPSTREAM_BASE_URL=http://152.53.52.170:3003
 UPSTREAM_API_KEY=sk-...
 
 LOCAL_API_KEYS=local-key-1,local-key-2
-ADMIN_API_KEYS=admin-key-1,admin-key-2
 
 ALLOWED_MODELS=claude-sonnet-4-5-20250929,claude-sonnet-4-5-20250929-thinking
 REQUEST_TIMEOUT_MS=60000
@@ -107,16 +106,8 @@ DISABLE_STREAMING=true
 
 ## Authentication
 
-Two independent keys:
-
 - Local key (protects `/v1/messages`, `/v1/models`)
   - `x-api-key: <key>` or `Authorization: Bearer <key>`
-- Admin key (protects `/admin/config` and other `/admin/*` APIs)
-  - `x-admin-key: <key>` or `Authorization: Bearer <key>`
-
-Bootstrap mode:
-
-- If no admin key is configured, the Admin UI is accessible from loopback only (when listening on `127.0.0.1`) so you can set it.
 
 ## Endpoints
 
@@ -124,11 +115,9 @@ Bootstrap mode:
 - `GET /v1/models`
 - `POST /v1/messages` (Anthropic Messages API)
 
-Admin:
+UI:
 
 - `GET /admin` (UI)
-- `GET /admin/config`
-- `PUT /admin/config`
 
 Docs:
 

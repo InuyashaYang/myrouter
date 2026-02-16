@@ -1,11 +1,10 @@
 import Fastify from "fastify";
 import { getEnvOverrides, getListenConfig } from "./config.js";
 import {
-  enforceAdminAuthOrThrow,
-  enforceLocalAuthOrThrow,
   isLoopbackAddress,
   redactHeaders
 } from "./util.js";
+import { resolveProfileOrThrow } from "./util.js";
 import { buildModelsResponse } from "./models.js";
 import { resolveModelOrThrow } from "./models.js";
 import {
@@ -77,89 +76,52 @@ app.get("/admin", async (req, reply) => {
   reply.send(html);
 });
 
-app.get("/admin/config", async (req, reply) => {
-  const cfg = configManager.getEffective();
-  enforceAdminAuthOrThrow({
-    adminApiKeys: cfg.adminApiKeys,
-    listenHost: listen.listenHost,
-    remoteAddress: req.ip,
-    headers: req.headers
-  });
-
-  const meta = configManager.getMeta();
-  reply.send({
-    meta,
-    configured: cfg.configured,
-    upstreamBaseUrl: cfg.upstreamBaseUrl,
-    upstreamApiKeyHint: cfg.upstreamApiKey ? `set (${cfg.upstreamApiKey.length} chars)` : "empty",
-    localApiKeys: cfg.localApiKeys,
-    adminApiKeys: cfg.adminApiKeys,
-    allowedModels: cfg.allowedModels,
-    requestTimeoutMs: cfg.requestTimeoutMs,
-    disableStreaming: cfg.disableStreaming
-  });
-});
-
-app.put("/admin/config", async (req, reply) => {
-  const cfg = configManager.getEffective();
-  enforceAdminAuthOrThrow({
-    adminApiKeys: cfg.adminApiKeys,
-    listenHost: listen.listenHost,
-    remoteAddress: req.ip,
-    headers: req.headers
-  });
-
-  const body = req.body && typeof req.body === "object" ? req.body : {};
-
-  const updated = await configManager.update({
-    upstreamBaseUrl: body.upstreamBaseUrl,
-    upstreamApiKey: body.upstreamApiKey,
-    localApiKeys: body.localApiKeys,
-    adminApiKeys: body.adminApiKeys,
-    allowedModels: body.allowedModels,
-    requestTimeoutMs: body.requestTimeoutMs,
-    disableStreaming: body.disableStreaming
-  });
-
-  reply.send({ ok: true, configured: updated.configured });
-});
-
 app.get("/v1/models", async (req, reply) => {
   const cfg = configManager.getEffective();
-  enforceLocalAuthOrThrow(cfg, req.headers);
-  reply.send(buildModelsResponse(cfg.allowedModels));
+  const { profile } = resolveProfileOrThrow({ config: cfg, headers: req.headers });
+  const allowedModels = Array.isArray(profile.allowedModels) && profile.allowedModels.length
+    ? profile.allowedModels
+    : cfg.allowedModels;
+  reply.send(buildModelsResponse(allowedModels));
 });
 
 app.post("/v1/messages", async (req, reply) => {
   const cfg = configManager.getEffective();
-  if (!cfg.configured) {
+  const { profile } = resolveProfileOrThrow({ config: cfg, headers: req.headers });
+
+  const upstreamBaseUrl = profile.upstreamBaseUrl || cfg.upstreamBaseUrl;
+  const upstreamApiKey = profile.upstreamApiKey || cfg.upstreamApiKey;
+  const requestTimeoutMs = profile.requestTimeoutMs || cfg.requestTimeoutMs;
+  const disableStreaming = profile.disableStreaming != null ? !!profile.disableStreaming : !!cfg.disableStreaming;
+
+  if (!(upstreamBaseUrl && upstreamApiKey)) {
     reply.code(503).send({
       type: "error",
       error: {
         type: "invalid_request_error",
-        message: "Gateway is not configured. Open /admin to set upstreamBaseUrl/upstreamApiKey."
+        message: "Gateway is not configured. Set upstreamBaseUrl/upstreamApiKey in config.runtime.json."
       }
     });
     return;
   }
 
-  enforceLocalAuthOrThrow(cfg, req.headers);
-
   const reqBody = req.body && typeof req.body === "object" ? req.body : {};
 
   const resolvedModel = resolveModelOrThrow({
     requestedModel: reqBody.model,
-    allowedModels: cfg.allowedModels,
+    allowedModels: (Array.isArray(profile.allowedModels) && profile.allowedModels.length)
+      ? profile.allowedModels
+      : cfg.allowedModels,
     thinking: reqBody.thinking
   });
 
   const upstreamBody = anthropicToUpstreamChatBody(reqBody, resolvedModel);
 
   const upstreamRes = await callUpstreamChatCompletions({
-    upstreamBaseUrl: cfg.upstreamBaseUrl,
-    upstreamApiKey: cfg.upstreamApiKey,
+    upstreamBaseUrl,
+    upstreamApiKey,
     body: upstreamBody,
-    timeoutMs: cfg.requestTimeoutMs
+    timeoutMs: requestTimeoutMs
   });
 
   if (!upstreamRes.ok) {
@@ -175,16 +137,16 @@ app.post("/v1/messages", async (req, reply) => {
     return;
   }
 
-  if (reqBody.stream && cfg.disableStreaming) {
+  if (reqBody.stream && disableStreaming) {
     // Compatibility downgrade: accept stream=true but return a streamed wrapper
     // around a non-stream upstream response.
     const downgradedBody = { ...reqBody, stream: false };
     const downgradedUpstreamBody = anthropicToUpstreamChatBody(downgradedBody, resolvedModel);
     const downgradedRes = await callUpstreamChatCompletions({
-      upstreamBaseUrl: cfg.upstreamBaseUrl,
-      upstreamApiKey: cfg.upstreamApiKey,
+      upstreamBaseUrl,
+      upstreamApiKey,
       body: downgradedUpstreamBody,
-      timeoutMs: cfg.requestTimeoutMs
+      timeoutMs: requestTimeoutMs
     });
     if (!downgradedRes.ok) {
       const text = await downgradedRes.text().catch(() => "");

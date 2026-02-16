@@ -1,9 +1,25 @@
 {
-  "upstreamBaseUrl": "http://152.53.52.170:3003",
-  "upstreamApiKey": "sk-...",
-  "localApiKeys": ["local-key-1"],
-  "adminApiKeys": ["admin-key-1"],
-  "allowedModels": [],
-  "requestTimeoutMs": 60000,
-  "disableStreaming": false
+  "defaultProfile": "claude",
+  "apiKeys": [
+    { "key": "local-key-1", "profile": "claude" },
+    { "key": "local-openai-1", "profile": "openai" }
+  ],
+  "profiles": {
+    "claude": {
+      "wrapper": "anthropic_messages",
+      "upstreamBaseUrl": "http://152.53.52.170:3003",
+      "upstreamApiKey": "sk-...",
+      "allowedModels": [],
+      "requestTimeoutMs": 60000,
+      "disableStreaming": false
+    },
+    "openai": {
+      "wrapper": "openai_chatcompletions",
+      "upstreamBaseUrl": "http://152.53.52.170:3003",
+      "upstreamApiKey": "sk-...",
+      "allowedModels": ["gpt-4o", "gpt-4.1", "codex-mini-latest"],
+      "requestTimeoutMs": 60000,
+      "disableStreaming": false
+    }
+  }
 }

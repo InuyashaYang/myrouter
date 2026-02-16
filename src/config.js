@@ -10,7 +10,6 @@ export function getEnvOverrides() {
   const upstreamApiKey = process.env.UPSTREAM_API_KEY || "";
 
   const localApiKeys = parseCsv(process.env.LOCAL_API_KEYS || "");
-  const adminApiKeys = parseCsv(process.env.ADMIN_API_KEYS || "");
   const allowedModels = parseCsv(process.env.ALLOWED_MODELS || "");
 
   const requestTimeoutMsRaw = process.env.REQUEST_TIMEOUT_MS || "";
@@ -23,7 +22,6 @@ export function getEnvOverrides() {
     upstreamBaseUrl: upstreamBaseUrl || null,
     upstreamApiKey: upstreamApiKey || null,
     localApiKeys: localApiKeys.length ? localApiKeys : null,
-    adminApiKeys: adminApiKeys.length ? adminApiKeys : null,
     allowedModels: allowedModels.length ? allowedModels : null,
     requestTimeoutMs: Number.isFinite(requestTimeoutMs) ? requestTimeoutMs : null,
     disableStreaming
