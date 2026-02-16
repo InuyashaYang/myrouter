@@ -95,6 +95,7 @@ ADMIN_API_KEYS=admin-key-1,admin-key-2
 
 ALLOWED_MODELS=claude-sonnet-4-5-20250929,claude-sonnet-4-5-20250929-thinking
 REQUEST_TIMEOUT_MS=60000
+DISABLE_STREAMING=true
 ```
 
 ## Authentication

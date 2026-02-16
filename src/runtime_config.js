@@ -37,7 +37,8 @@ function mergeEffective(fileConfig, envOverrides) {
     localApiKeys: [],
     adminApiKeys: [],
     allowedModels: defaultAllowedModels(),
-    requestTimeoutMs: 60000
+    requestTimeoutMs: 60000,
+    disableStreaming: false
   };
 
   const merged = {
@@ -46,7 +47,8 @@ function mergeEffective(fileConfig, envOverrides) {
     localApiKeys: pickFirst(envOverrides.localApiKeys, fileConfig.localApiKeys, defaults.localApiKeys),
     adminApiKeys: pickFirst(envOverrides.adminApiKeys, fileConfig.adminApiKeys, defaults.adminApiKeys),
     allowedModels: pickFirst(envOverrides.allowedModels, fileConfig.allowedModels, defaults.allowedModels),
-    requestTimeoutMs: pickFirst(envOverrides.requestTimeoutMs, fileConfig.requestTimeoutMs, defaults.requestTimeoutMs)
+    requestTimeoutMs: pickFirst(envOverrides.requestTimeoutMs, fileConfig.requestTimeoutMs, defaults.requestTimeoutMs),
+    disableStreaming: pickFirst(envOverrides.disableStreaming, fileConfig.disableStreaming, defaults.disableStreaming)
   };
 
   merged.upstreamBaseUrl = (typeof merged.upstreamBaseUrl === "string" ? merged.upstreamBaseUrl : "").replace(/\/$/, "");
@@ -56,6 +58,7 @@ function mergeEffective(fileConfig, envOverrides) {
   merged.allowedModels = normalizeStringArray(merged.allowedModels);
   if (merged.allowedModels.length === 0) merged.allowedModels = defaultAllowedModels();
   merged.requestTimeoutMs = normalizeTimeout(merged.requestTimeoutMs);
+  merged.disableStreaming = !!merged.disableStreaming;
   merged.configured = !!(merged.upstreamBaseUrl && merged.upstreamApiKey);
 
   return merged;
@@ -80,6 +83,9 @@ function applyUpdate(prev, patch) {
   }
   if (Object.prototype.hasOwnProperty.call(patch, "requestTimeoutMs")) {
     next.requestTimeoutMs = normalizeTimeout(patch.requestTimeoutMs);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "disableStreaming")) {
+    next.disableStreaming = !!patch.disableStreaming;
   }
   return next;
 }
@@ -138,6 +144,7 @@ function getEnvLocks(envOverrides) {
     localApiKeys: envOverrides.localApiKeys !== null,
     adminApiKeys: envOverrides.adminApiKeys !== null,
     allowedModels: envOverrides.allowedModels !== null,
-    requestTimeoutMs: envOverrides.requestTimeoutMs !== null
+    requestTimeoutMs: envOverrides.requestTimeoutMs !== null,
+    disableStreaming: envOverrides.disableStreaming !== null
   };
 }

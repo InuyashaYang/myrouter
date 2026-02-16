@@ -368,6 +368,17 @@
                     </div>
                   </div>
 
+                  <div class="row">
+                    <label>关闭流式</label>
+                    <div>
+                      <label style="display:flex; gap:10px; align-items:center; padding-top:8px;">
+                        <input id="disableStreaming" type="checkbox" />
+                        <span class="small">禁用 `stream=true`（用于规避部分客户端的 SSE/工具参数解析问题）</span>
+                      </label>
+                      <div class="hint" id="lockDisableStreaming"></div>
+                    </div>
+                  </div>
+
                   <div class="btns">
                     <button class="btn primary" id="btnLoad">刷新</button>
                     <button class="btn primary" id="btnSave">保存并生效</button>
@@ -541,6 +552,7 @@
 
         $("allowedModels").value = (data.allowedModels || []).join("\n");
         $("requestTimeoutMs").value = String(data.requestTimeoutMs || "");
+        $("disableStreaming").checked = !!data.disableStreaming;
 
         const locks = (data.meta && data.meta.envLocks) || {};
         setLockHint($("lockUpstreamBaseUrl"), !!locks.upstreamBaseUrl, "UPSTREAM_BASE_URL");
@@ -549,6 +561,7 @@
         setLockHint($("lockAdminApiKeys"), !!locks.adminApiKeys, "ADMIN_API_KEYS");
         setLockHint($("lockAllowedModels"), !!locks.allowedModels, "ALLOWED_MODELS");
         setLockHint($("lockRequestTimeoutMs"), !!locks.requestTimeoutMs, "REQUEST_TIMEOUT_MS");
+        setLockHint($("lockDisableStreaming"), !!locks.disableStreaming, "DISABLE_STREAMING");
 
         const ok = !!data.configured;
         setCfgState(ok, ok ? "configured" : "not configured");
@@ -564,7 +577,8 @@
           localApiKeys: parseLinesOrCsv($("localApiKeys").value),
           adminApiKeys: parseLinesOrCsv($("adminApiKeys").value),
           allowedModels: parseLinesOrCsv($("allowedModels").value),
-          requestTimeoutMs: parseInt($("requestTimeoutMs").value.trim() || "60000", 10)
+          requestTimeoutMs: parseInt($("requestTimeoutMs").value.trim() || "60000", 10),
+          disableStreaming: !!$("disableStreaming").checked
         };
 
         const keyInput = $("upstreamApiKey").value;

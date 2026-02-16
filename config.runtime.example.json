@@ -4,5 +4,6 @@
   "localApiKeys": ["local-key-1"],
   "adminApiKeys": ["admin-key-1"],
   "allowedModels": [],
-  "requestTimeoutMs": 60000
+  "requestTimeoutMs": 60000,
+  "disableStreaming": false
 }

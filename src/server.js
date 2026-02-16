@@ -94,7 +94,8 @@ app.get("/admin/config", async (req, reply) => {
     localApiKeys: cfg.localApiKeys,
     adminApiKeys: cfg.adminApiKeys,
     allowedModels: cfg.allowedModels,
-    requestTimeoutMs: cfg.requestTimeoutMs
+    requestTimeoutMs: cfg.requestTimeoutMs,
+    disableStreaming: cfg.disableStreaming
   });
 });
 
@@ -115,7 +116,8 @@ app.put("/admin/config", async (req, reply) => {
     localApiKeys: body.localApiKeys,
     adminApiKeys: body.adminApiKeys,
     allowedModels: body.allowedModels,
-    requestTimeoutMs: body.requestTimeoutMs
+    requestTimeoutMs: body.requestTimeoutMs,
+    disableStreaming: body.disableStreaming
   });
 
   reply.send({ ok: true, configured: updated.configured });
@@ -167,6 +169,17 @@ app.post("/v1/messages", async (req, reply) => {
       error: {
         type: "upstream_error",
         message: text || `Upstream error: HTTP ${upstreamRes.status}`
+      }
+    });
+    return;
+  }
+
+  if (reqBody.stream && cfg.disableStreaming) {
+    reply.code(400).send({
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        message: "Streaming is disabled on this gateway. Remove stream=true."
       }
     });
     return;

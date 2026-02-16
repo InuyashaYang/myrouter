@@ -16,14 +16,25 @@ export function getEnvOverrides() {
   const requestTimeoutMsRaw = process.env.REQUEST_TIMEOUT_MS || "";
   const requestTimeoutMs = requestTimeoutMsRaw ? parseInt(requestTimeoutMsRaw, 10) : null;
 
+  const disableStreamingRaw = process.env.DISABLE_STREAMING || "";
+  const disableStreaming = disableStreamingRaw ? parseBool(disableStreamingRaw) : null;
+
   return {
     upstreamBaseUrl: upstreamBaseUrl || null,
     upstreamApiKey: upstreamApiKey || null,
     localApiKeys: localApiKeys.length ? localApiKeys : null,
     adminApiKeys: adminApiKeys.length ? adminApiKeys : null,
     allowedModels: allowedModels.length ? allowedModels : null,
-    requestTimeoutMs: Number.isFinite(requestTimeoutMs) ? requestTimeoutMs : null
+    requestTimeoutMs: Number.isFinite(requestTimeoutMs) ? requestTimeoutMs : null,
+    disableStreaming
   };
+}
+
+function parseBool(value) {
+  const v = String(value || "").trim().toLowerCase();
+  if (v === "1" || v === "true" || v === "yes" || v === "on") return true;
+  if (v === "0" || v === "false" || v === "no" || v === "off") return false;
+  return false;
 }
 
 function parseCsv(value) {
