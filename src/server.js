@@ -14,6 +14,7 @@ import {
 } from "./anthropic.js";
 import { callUpstreamChatCompletions } from "./upstream.js";
 import { pipeOpenAIStreamToAnthropic } from "./openai_stream_to_anthropic.js";
+import { writeAnthropicMessageAsSSE } from "./anthropic_message_to_sse.js";
 import {
   createRuntimeConfigManager,
   getRuntimeConfigPath
@@ -175,13 +176,33 @@ app.post("/v1/messages", async (req, reply) => {
   }
 
   if (reqBody.stream && cfg.disableStreaming) {
-    reply.code(400).send({
-      type: "error",
-      error: {
-        type: "invalid_request_error",
-        message: "Streaming is disabled on this gateway. Remove stream=true."
-      }
+    // Compatibility downgrade: accept stream=true but return a streamed wrapper
+    // around a non-stream upstream response.
+    const downgradedBody = { ...reqBody, stream: false };
+    const downgradedUpstreamBody = anthropicToUpstreamChatBody(downgradedBody, resolvedModel);
+    const downgradedRes = await callUpstreamChatCompletions({
+      upstreamBaseUrl: cfg.upstreamBaseUrl,
+      upstreamApiKey: cfg.upstreamApiKey,
+      body: downgradedUpstreamBody,
+      timeoutMs: cfg.requestTimeoutMs
     });
+    if (!downgradedRes.ok) {
+      const text = await downgradedRes.text().catch(() => "");
+      reply.code(downgradedRes.status);
+      reply.send({
+        type: "error",
+        error: {
+          type: "upstream_error",
+          message: text || `Upstream error: HTTP ${downgradedRes.status}`
+        }
+      });
+      return;
+    }
+
+    const upstreamJson = await downgradedRes.json();
+    const msg = upstreamToAnthropicMessage(upstreamJson, resolvedModel);
+    reply.hijack();
+    await writeAnthropicMessageAsSSE({ replyRaw: reply.raw, message: msg });
     return;
   }
 
