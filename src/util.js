@@ -30,56 +30,6 @@ export function isLoopbackAddress(addr) {
   return false;
 }
 
-export function resolveProfileOrThrow({ config, headers }) {
-  const token = getAuthToken(headers);
-
-  // Backward compatibility: if profiles are not configured, fall back to legacy localApiKeys.
-  if (!config || typeof config !== "object") {
-    const err = new Error("Unauthorized");
-    err.statusCode = 401;
-    throw err;
-  }
-
-  if (!config.profiles || typeof config.profiles !== "object") {
-    enforceLocalAuthOrThrow(config, headers);
-    const defaultProfileName = config.defaultProfile || "default";
-    const profile = {
-      name: defaultProfileName,
-      wrapper: "anthropic_messages",
-      upstreamBaseUrl: config.upstreamBaseUrl,
-      upstreamApiKey: config.upstreamApiKey,
-      allowedModels: config.allowedModels,
-      requestTimeoutMs: config.requestTimeoutMs,
-      disableStreaming: !!config.disableStreaming
-    };
-    return { profileName: defaultProfileName, profile };
-  }
-
-  const apiKeys = Array.isArray(config.apiKeys) ? config.apiKeys : [];
-  if (!token) {
-    const err = new Error("Unauthorized");
-    err.statusCode = 401;
-    throw err;
-  }
-
-  const mapping = apiKeys.find((k) => k && typeof k === "object" && k.key === token);
-  if (!mapping || !mapping.profile) {
-    const err = new Error("Unauthorized");
-    err.statusCode = 401;
-    throw err;
-  }
-
-  const profileName = String(mapping.profile);
-  const profile = config.profiles[profileName];
-  if (!profile || typeof profile !== "object") {
-    const err = new Error("Unauthorized");
-    err.statusCode = 401;
-    throw err;
-  }
-
-  return { profileName, profile };
-}
-
 export function randomId(prefix) {
   return `${prefix}_${crypto.randomBytes(12).toString("hex")}`;
 }

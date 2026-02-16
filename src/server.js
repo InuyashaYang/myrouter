@@ -1,10 +1,10 @@
 import Fastify from "fastify";
 import { getEnvOverrides, getListenConfig } from "./config.js";
 import {
+  enforceLocalAuthOrThrow,
   isLoopbackAddress,
   redactHeaders
 } from "./util.js";
-import { resolveProfileOrThrow } from "./util.js";
 import { buildModelsResponse } from "./models.js";
 import { resolveModelOrThrow } from "./models.js";
 import {
@@ -89,29 +89,9 @@ app.get("/admin/config", async (req, reply) => {
   const cfg = configManager.getEffective();
   const meta = configManager.getMeta();
 
-  // Only return hints for secrets.
-  const fileCfg = configManager.getFileConfig ? configManager.getFileConfig() : {};
-  const profiles = fileCfg && fileCfg.profiles && typeof fileCfg.profiles === "object" ? fileCfg.profiles : {};
-  const profilesOut = {};
-  for (const [name, p] of Object.entries(profiles)) {
-    if (!p || typeof p !== "object") continue;
-    profilesOut[name] = {
-      wrapper: p.wrapper || "",
-      upstreamBaseUrl: p.upstreamBaseUrl || "",
-      upstreamApiKeyHint: p.upstreamApiKey ? `set (${String(p.upstreamApiKey).length} chars)` : "empty",
-      allowedModels: Array.isArray(p.allowedModels) ? p.allowedModels : [],
-      requestTimeoutMs: typeof p.requestTimeoutMs === "number" ? p.requestTimeoutMs : 60000,
-      disableStreaming: !!p.disableStreaming
-    };
-  }
-
   reply.send({
     meta,
     configured: cfg.configured,
-    defaultProfile: fileCfg.defaultProfile || cfg.defaultProfile || "",
-    apiKeys: Array.isArray(fileCfg.apiKeys) ? fileCfg.apiKeys.map((k) => ({ keyHint: k.key ? `set (${String(k.key).length} chars)` : "empty", profile: k.profile })) : [],
-    profiles: profilesOut,
-
     // legacy view
     upstreamBaseUrl: cfg.upstreamBaseUrl,
     upstreamApiKeyHint: cfg.upstreamApiKey ? `set (${cfg.upstreamApiKey.length} chars)` : "empty",
@@ -133,9 +113,7 @@ app.put("/admin/config", async (req, reply) => {
 
   const body = req.body && typeof req.body === "object" ? req.body : {};
 
-  // Support two modes:
-  // 1) raw: { config: { ...full config.runtime.json... } }
-  // 2) targeted: { profileName: "claude", profilePatch: {...}, defaultProfile?, apiKeys? }
+  // Support raw overwrite: { config: { ...full config.runtime.json... } }
   if (body && body.config && typeof body.config === "object") {
     await configManager.updateRaw(body.config);
     reply.send({ ok: true });
@@ -149,14 +127,7 @@ app.put("/admin/config", async (req, reply) => {
     localApiKeys: body.localApiKeys,
     allowedModels: body.allowedModels,
     requestTimeoutMs: body.requestTimeoutMs,
-    disableStreaming: body.disableStreaming,
-
-    // Profile-based fields
-    defaultProfile: body.defaultProfile,
-    apiKeys: body.apiKeys,
-    profiles: body.profiles,
-    profileName: body.profileName,
-    profilePatch: body.profilePatch
+    disableStreaming: body.disableStreaming
   });
 
   reply.send({ ok: true });
@@ -164,21 +135,16 @@ app.put("/admin/config", async (req, reply) => {
 
 app.get("/v1/models", async (req, reply) => {
   const cfg = configManager.getEffective();
-  const { profile } = resolveProfileOrThrow({ config: cfg, headers: req.headers });
-  const allowedModels = Array.isArray(profile.allowedModels) && profile.allowedModels.length
-    ? profile.allowedModels
-    : cfg.allowedModels;
-  reply.send(buildModelsResponse(allowedModels));
+  enforceLocalAuthOrThrow(cfg, req.headers);
+  reply.send(buildModelsResponse(cfg.allowedModels));
 });
 
 app.post("/v1/messages", async (req, reply) => {
   const cfg = configManager.getEffective();
-  const { profile } = resolveProfileOrThrow({ config: cfg, headers: req.headers });
-
-  const upstreamBaseUrl = profile.upstreamBaseUrl || cfg.upstreamBaseUrl;
-  const upstreamApiKey = profile.upstreamApiKey || cfg.upstreamApiKey;
-  const requestTimeoutMs = profile.requestTimeoutMs || cfg.requestTimeoutMs;
-  const disableStreaming = profile.disableStreaming != null ? !!profile.disableStreaming : !!cfg.disableStreaming;
+  const upstreamBaseUrl = cfg.upstreamBaseUrl;
+  const upstreamApiKey = cfg.upstreamApiKey;
+  const requestTimeoutMs = cfg.requestTimeoutMs;
+  const disableStreaming = !!cfg.disableStreaming;
 
   if (!(upstreamBaseUrl && upstreamApiKey)) {
     reply.code(503).send({
@@ -191,13 +157,13 @@ app.post("/v1/messages", async (req, reply) => {
     return;
   }
 
+  enforceLocalAuthOrThrow(cfg, req.headers);
+
   const reqBody = req.body && typeof req.body === "object" ? req.body : {};
 
   const resolvedModel = resolveModelOrThrow({
     requestedModel: reqBody.model,
-    allowedModels: (Array.isArray(profile.allowedModels) && profile.allowedModels.length)
-      ? profile.allowedModels
-      : cfg.allowedModels,
+    allowedModels: cfg.allowedModels,
     thinking: reqBody.thinking
   });
 
