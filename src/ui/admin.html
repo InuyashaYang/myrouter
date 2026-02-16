@@ -648,32 +648,47 @@
         const upstreamKey = c ? maskHint(c.upstreamApiKeyHint) : "unknown";
         const configured = c && c.configured ? "yes" : "no";
 
-        return [
-          "你是我的本地网关调试助手。请根据以下信息，帮我排查/扩展/生成对接示例。",
-          "",
-          "## 网关基本信息",
-          `- 项目: MyRouter (Local LLM Gateway)
-- Base URL: ${baseOrigin}
-- 对外协议: Anthropic Messages API
-- 关键接口: POST ${baseOrigin}/v1/messages
-- 模型列表: GET ${baseOrigin}/v1/models
-- 配置状态: configured=${configured}
-- 上游: ${upstream}
-- 上游 key: ${upstreamKey} (已打码，不提供明文)",
-          "",
-          "## 我希望 AI 帮我做的事",
-          "- 生成一段最小可用的 PowerShell/Node/Python 调用示例，调用 /v1/messages",
-          "- 如果我描述报错，请解释可能原因并给出定位步骤",
-          "- 如果我要接入 Claude Code/第三方工具，请给出它应当填写的 base url / key / model",
-          "",
-          "## 可用模型（白名单）",
-          models.length ? models.map((m) => `- ${m}`).join("\n") : "- (unknown)",
-          "",
-          "## 请求示例（Anthropic Messages API）",
-          "```json\n{\n  \"model\": \"claude-sonnet-4-5-20250929-thinking\",\n  \"max_tokens\": 128,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [{ \"type\": \"text\", \"text\": \"say ok\" }]\n    }\n  ]\n}\n```",
-          "",
-          "注意：不要让我把任何 secret（上游 key）贴出来。"
-        ].join("\n");
+        const lines = [];
+        lines.push("你是我的本地网关调试助手。请根据以下信息，帮我排查/扩展/生成对接示例。");
+        lines.push("");
+        lines.push("## 网关基本信息");
+        lines.push("- 项目: MyRouter (Local LLM Gateway)");
+        lines.push(`- Base URL: ${baseOrigin}`);
+        lines.push("- 对外协议: Anthropic Messages API");
+        lines.push(`- 关键接口: POST ${baseOrigin}/v1/messages`);
+        lines.push(`- 模型列表: GET ${baseOrigin}/v1/models`);
+        lines.push(`- 配置状态: configured=${configured}`);
+        lines.push(`- 上游: ${upstream}`);
+        lines.push(`- 上游 key: ${upstreamKey} (已打码，不提供明文)`);
+        lines.push("");
+        lines.push("## 我希望 AI 帮我做的事");
+        lines.push("- 生成一段最小可用的 PowerShell/Node/Python 调用示例，调用 /v1/messages");
+        lines.push("- 如果我描述报错，请解释可能原因并给出定位步骤");
+        lines.push("- 如果我要接入 Claude Code/第三方工具，请给出它应当填写的 base url / key / model");
+        lines.push("");
+        lines.push("## 可用模型（白名单）");
+        if (models.length) {
+          for (const m of models) lines.push(`- ${m}`);
+        } else {
+          lines.push("- (unknown)");
+        }
+        lines.push("");
+        lines.push("## 请求示例（Anthropic Messages API）");
+        lines.push("```json");
+        lines.push("{");
+        lines.push("  \"model\": \"claude-sonnet-4-5-20250929-thinking\",");
+        lines.push("  \"max_tokens\": 128,");
+        lines.push("  \"messages\": [");
+        lines.push("    {");
+        lines.push("      \"role\": \"user\",");
+        lines.push("      \"content\": [{ \"type\": \"text\", \"text\": \"say ok\" }]");
+        lines.push("    }");
+        lines.push("  ]");
+        lines.push("}");
+        lines.push("```");
+        lines.push("");
+        lines.push("注意：不要让我把任何 secret（上游 key）贴出来。");
+        return lines.join("\n");
       }
 
       async function copyText(text) {
