@@ -47,9 +47,9 @@ function Read-PidFile() {
   return $null
 }
 
-function Is-ProcessAlive([int]$pid) {
+function Is-ProcessAlive([int]$processId) {
   try {
-    $p = Get-Process -Id $pid -ErrorAction Stop
+    $p = Get-Process -Id $processId -ErrorAction Stop
     return $true
   } catch {
     return $false

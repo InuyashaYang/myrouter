@@ -174,13 +174,23 @@ app.post("/v1/messages", async (req, reply) => {
 
   if (reqBody.stream) {
     reply.hijack();
-    reply.raw.on("close", () => {
+
+    let cancelled = false;
+    const safeCancel = () => {
+      if (cancelled) return;
+      cancelled = true;
       try {
-        upstreamRes.body?.cancel?.();
+        // If a reader is already locked, cancel can throw "ReadableStream is locked".
+        // In that case, just ignore: the pipe will end naturally.
+        if (upstreamRes.body && !upstreamRes.body.locked && typeof upstreamRes.body.cancel === "function") {
+          upstreamRes.body.cancel();
+        }
       } catch {
         // ignore
       }
-    });
+    };
+    reply.raw.on("close", safeCancel);
+    reply.raw.on("error", safeCancel);
     await pipeOpenAIStreamToAnthropic({
       upstreamResponse: upstreamRes,
       replyRaw: reply.raw,
