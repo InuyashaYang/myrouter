@@ -1,0 +1,8 @@
+{
+  "upstreamBaseUrl": "http://152.53.52.170:3003",
+  "upstreamApiKey": "sk-...",
+  "localApiKeys": ["local-key-1"],
+  "adminApiKeys": ["admin-key-1"],
+  "allowedModels": [],
+  "requestTimeoutMs": 60000
+}

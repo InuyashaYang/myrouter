@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MyRouter Admin</title>
+    <style>
+      :root {
+        --bg0: #f5f2ea;
+        --bg1: #efe9dd;
+        --paper: rgba(255, 255, 255, 0.72);
+        --ink: #1e1a14;
+        --muted: rgba(30, 26, 20, 0.68);
+        --line: rgba(30, 26, 20, 0.14);
+        --accent: #0a6b5c;
+        --accent2: #b24a2b;
+        --shadow: 0 10px 35px rgba(10, 10, 10, 0.12);
+        --radius: 14px;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background:
+          radial-gradient(900px 600px at 12% 12%, rgba(10, 107, 92, 0.13), transparent 60%),
+          radial-gradient(900px 600px at 85% 18%, rgba(178, 74, 43, 0.12), transparent 62%),
+          linear-gradient(180deg, var(--bg0), var(--bg1));
+        font-family: "Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+
+      .wrap {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 20px 16px 40px;
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: 260px 1fr;
+        gap: 14px;
+        align-items: start;
+      }
+
+      @media (max-width: 980px) {
+        .shell { grid-template-columns: 1fr; }
+      }
+
+      .card {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        animation: rise 320ms ease-out both;
+      }
+
+      @keyframes rise {
+        from { transform: translateY(8px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+
+      .side {
+        position: sticky;
+        top: 14px;
+      }
+
+      @media (max-width: 980px) {
+        .side { position: static; }
+      }
+
+      .brand {
+        padding: 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .brand h1 {
+        margin: 0;
+        font-size: 20px;
+        letter-spacing: 0.2px;
+      }
+      .brand .sub {
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+
+      .nav {
+        padding: 10px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .nav button {
+        width: 100%;
+        text-align: left;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        appearance: none;
+        border: 1px solid rgba(30, 26, 20, 0.14);
+        border-radius: 14px;
+        padding: 12px 12px;
+        background: rgba(255, 255, 255, 0.55);
+        color: var(--ink);
+        cursor: pointer;
+        font-weight: 800;
+        letter-spacing: 0.2px;
+        transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+      }
+      .nav button:hover { transform: translateY(-1px); background: rgba(255, 255, 255, 0.75); }
+      .nav button.active {
+        border-color: rgba(10, 107, 92, 0.35);
+        background: rgba(10, 107, 92, 0.08);
+      }
+      .nav .hint {
+        font-size: 11px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .topbar {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .tag {
+        font-family: "Cascadia Mono", "Consolas", monospace;
+        font-size: 12px;
+        padding: 6px 10px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.5);
+      }
+
+      .pills { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.55);
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .dot { width: 9px; height: 9px; border-radius: 999px; background: rgba(178, 74, 43, 0.7); }
+      .dot.ok { background: rgba(10, 107, 92, 0.8); }
+
+      .pane {
+        padding: 16px;
+        display: none;
+      }
+      .pane.active { display: block; }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 14px;
+      }
+      @media (max-width: 980px) {
+        .grid { grid-template-columns: 1fr; }
+      }
+
+      .subcard {
+        background: rgba(255, 255, 255, 0.42);
+        border: 1px solid rgba(30, 26, 20, 0.12);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+      .subcard .hd {
+        padding: 12px 14px;
+        border-bottom: 1px solid rgba(30, 26, 20, 0.12);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+      .subcard .hd h2 {
+        margin: 0;
+        font-size: 13px;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-weight: 800;
+      }
+      .subcard .bd { padding: 14px; }
+
+      .row {
+        display: grid;
+        grid-template-columns: 170px 1fr;
+        gap: 10px;
+        align-items: start;
+        padding: 10px 0;
+        border-top: 1px dashed rgba(30, 26, 20, 0.12);
+      }
+      .row:first-child { border-top: 0; padding-top: 0; }
+      .row label {
+        font-size: 12px;
+        color: var(--muted);
+        padding-top: 10px;
+      }
+
+      input[type="text"], input[type="password"], textarea {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(30, 26, 20, 0.18);
+        background: rgba(255, 255, 255, 0.62);
+        color: var(--ink);
+        outline: none;
+        transition: border-color 140ms ease;
+      }
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+        font-family: "Cascadia Mono", "Consolas", monospace;
+        font-size: 12px;
+      }
+      input:focus, textarea:focus {
+        border-color: rgba(10, 107, 92, 0.55);
+      }
+
+      .hint {
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .btns { display: flex; gap: 10px; flex-wrap: wrap; }
+      .btn {
+        appearance: none;
+        border: 1px solid rgba(30, 26, 20, 0.18);
+        border-radius: 999px;
+        padding: 10px 12px;
+        background: rgba(255, 255, 255, 0.55);
+        color: var(--ink);
+        cursor: pointer;
+        font-weight: 800;
+        letter-spacing: 0.2px;
+        transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+      }
+      .btn:hover { transform: translateY(-1px); background: rgba(255, 255, 255, 0.75); }
+      .btn.primary {
+        border-color: rgba(10, 107, 92, 0.42);
+        background: rgba(10, 107, 92, 0.08);
+      }
+      .btn.danger {
+        border-color: rgba(178, 74, 43, 0.45);
+        background: rgba(178, 74, 43, 0.08);
+      }
+
+      .status {
+        font-family: "Cascadia Mono", "Consolas", monospace;
+        font-size: 12px;
+        padding: 8px 10px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.55);
+        white-space: pre-wrap;
+      }
+
+      .iframe {
+        width: 100%;
+        height: min(78vh, 900px);
+        border: 1px solid rgba(30, 26, 20, 0.12);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.4);
+      }
+
+      .mono { font-family: "Cascadia Mono", "Consolas", monospace; font-size: 12px; }
+      .small { font-size: 12px; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="shell">
+        <aside class="card side">
+          <div class="brand">
+            <h1>MyRouter</h1>
+            <div class="sub">本地网关管理台：配置 / 测试 / 文档 / 一键复制</div>
+          </div>
+          <div class="nav">
+            <button class="active" data-tab="config"><span>配置</span><span class="hint">/admin/config</span></button>
+            <button data-tab="test"><span>测试</span><span class="hint">/v1/messages</span></button>
+            <button data-tab="docs"><span>文档</span><span class="hint">内置</span></button>
+            <button data-tab="copy"><span>一键复制</span><span class="hint">给 AI</span></button>
+          </div>
+        </aside>
+
+        <main class="card">
+          <div class="topbar">
+            <div class="tag" id="metaTag">loading…</div>
+            <div class="pills">
+              <div class="pill"><span class="dot" id="cfgDot"></span><span id="cfgState">unknown</span></div>
+              <div class="pill"><span class="dot" id="testDot"></span><span id="testState">idle</span></div>
+              <div class="pill"><span class="mono" id="baseUrl">base…</span></div>
+            </div>
+          </div>
+
+          <div class="pane active" id="pane-config">
+            <div class="grid">
+              <section class="subcard">
+                <div class="hd"><h2>配置</h2></div>
+                <div class="bd">
+                  <div class="row">
+                    <label>Admin Key</label>
+                    <div>
+                      <input id="adminKey" type="password" placeholder="x-admin-key (保存到 sessionStorage)" />
+                      <div class="hint">用于访问管理 API（不影响 /v1/messages）。</div>
+                    </div>
+                  </div>
+
+                  <div class="row">
+                    <label>上游 Base URL</label>
+                    <div>
+                      <input id="upstreamBaseUrl" type="text" placeholder="http://152.53.52.170:3003" />
+                      <div class="hint" id="lockUpstreamBaseUrl"></div>
+                    </div>
+                  </div>
+
+                  <div class="row">
+                    <label>上游 API Key</label>
+                    <div>
+                      <input id="upstreamApiKey" type="password" placeholder="留空=不修改；填值=覆盖；填 '-'=清空" />
+                      <div class="hint" id="upstreamApiKeyHint"></div>
+                      <div class="hint" id="lockUpstreamApiKey"></div>
+                    </div>
+                  </div>
+
+                  <div class="row">
+                    <label>本地 API Keys</label>
+                    <div>
+                      <textarea id="localApiKeys" placeholder="local-key-1\nlocal-key-2"></textarea>
+                      <div class="hint" id="lockLocalApiKeys"></div>
+                    </div>
+                  </div>
+
+                  <div class="row">
+                    <label>Admin API Keys</label>
+                    <div>
+                      <textarea id="adminApiKeys" placeholder="admin-key-1\nadmin-key-2"></textarea>
+                      <div class="hint" id="lockAdminApiKeys"></div>
+                    </div>
+                  </div>
+
+                  <div class="row">
+                    <label>允许模型</label>
+                    <div>
+                      <textarea id="allowedModels" placeholder="一行一个模型；留空=使用默认组"></textarea>
+                      <div class="hint" id="lockAllowedModels"></div>
+                    </div>
+                  </div>
+
+                  <div class="row">
+                    <label>超时 (ms)</label>
+                    <div>
+                      <input id="requestTimeoutMs" type="text" class="mono" placeholder="60000" />
+                      <div class="hint" id="lockRequestTimeoutMs"></div>
+                    </div>
+                  </div>
+
+                  <div class="btns">
+                    <button class="btn primary" id="btnLoad">刷新</button>
+                    <button class="btn primary" id="btnSave">保存并生效</button>
+                    <button class="btn danger" id="btnClearKey">清空上游 Key</button>
+                  </div>
+
+                  <div style="height: 10px"></div>
+                  <div class="status" id="saveStatus">—</div>
+                </div>
+              </section>
+
+              <section class="subcard">
+                <div class="hd"><h2>提示</h2></div>
+                <div class="bd">
+                  <div class="status" id="tips">
+常用入口：
+- 管理台：/admin
+- 文档：/docs (也可以在左侧“文档”里看)
+- Anthropic：POST /v1/messages
+
+建议：
+- 本地只监听 127.0.0.1
+- 配置 Local API Keys + Admin API Keys
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <div class="pane" id="pane-test">
+            <section class="subcard">
+              <div class="hd"><h2>测试 /v1/messages</h2></div>
+              <div class="bd">
+                <div class="row">
+                  <label>本地请求 Key</label>
+                  <div>
+                    <input id="localKeyForTest" type="password" placeholder="x-api-key；若本地未启用鉴权可留空" />
+                    <div class="hint">用于调用 /v1/messages 测试。</div>
+                  </div>
+                </div>
+                <div class="row">
+                  <label>模型</label>
+                  <div>
+                    <input id="testModel" type="text" class="mono" placeholder="claude-sonnet-4-5-20250929-thinking" />
+                  </div>
+                </div>
+                <div class="row">
+                  <label>输入</label>
+                  <div>
+                    <textarea id="testPrompt" placeholder="say ok"></textarea>
+                  </div>
+                </div>
+                <div class="btns">
+                  <button class="btn primary" id="btnTest">发送一次 (non-stream)</button>
+                </div>
+                <div style="height: 10px"></div>
+                <div class="status" id="testOutput">—</div>
+              </div>
+            </section>
+          </div>
+
+          <div class="pane" id="pane-docs">
+            <section class="subcard">
+              <div class="hd"><h2>文档</h2><div class="small">无需手动改路由，直接在这里看</div></div>
+              <div class="bd">
+                <iframe class="iframe" id="docsFrame" src="/docs"></iframe>
+              </div>
+            </section>
+          </div>
+
+          <div class="pane" id="pane-copy">
+            <section class="subcard">
+              <div class="hd"><h2>一键复制给 AI</h2></div>
+              <div class="bd">
+                <div class="small">不会复制任何 secret（key 会被打码）。如果需要更详细的上下文，先点“刷新”获取最新配置。</div>
+                <div style="height: 10px"></div>
+                <div class="btns">
+                  <button class="btn primary" id="btnGenPrompt">生成内容</button>
+                  <button class="btn primary" id="btnCopyPrompt">复制到剪贴板</button>
+                </div>
+                <div style="height: 10px"></div>
+                <textarea id="aiPrompt" style="min-height: 360px" placeholder="点击“生成内容”"></textarea>
+                <div class="hint" id="copyStatus"></div>
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+
+      const adminKeyEl = $("adminKey");
+      const localKeyForTestEl = $("localKeyForTest");
+      const baseOrigin = window.location.origin;
+      $("baseUrl").textContent = baseOrigin;
+
+      let currentConfig = null;
+
+      function loadSession() {
+        const ak = sessionStorage.getItem("myrouter_admin_key") || "";
+        const lk = sessionStorage.getItem("myrouter_local_key") || "";
+        adminKeyEl.value = ak;
+        localKeyForTestEl.value = lk;
+      }
+
+      function saveSession() {
+        sessionStorage.setItem("myrouter_admin_key", adminKeyEl.value || "");
+        sessionStorage.setItem("myrouter_local_key", localKeyForTestEl.value || "");
+      }
+
+      function adminHeaders() {
+        const h = {};
+        const k = (adminKeyEl.value || "").trim();
+        if (k) h["x-admin-key"] = k;
+        return h;
+      }
+
+      function localHeaders() {
+        const h = {};
+        const k = (localKeyForTestEl.value || "").trim();
+        if (k) h["x-api-key"] = k;
+        return h;
+      }
+
+      function parseLinesOrCsv(text) {
+        return (text || "")
+          .split(/[\n\r,]/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+
+      function setLockHint(el, locked, envName) {
+        el.textContent = locked ? `被环境变量 ${envName} 覆盖；页面修改不会生效` : "";
+      }
+
+      function setCfgState(ok, text) {
+        $("cfgDot").className = ok ? "dot ok" : "dot";
+        $("cfgState").textContent = text;
+      }
+
+      function setTestState(ok, text) {
+        $("testDot").className = ok ? "dot ok" : "dot";
+        $("testState").textContent = text;
+      }
+
+      async function loadConfig() {
+        saveSession();
+        $("saveStatus").textContent = "loading…";
+        const res = await fetch("/admin/config", { headers: adminHeaders() });
+        if (!res.ok) {
+          const t = await res.text();
+          $("saveStatus").textContent = `加载失败 HTTP ${res.status}: ${t}`;
+          currentConfig = null;
+          setCfgState(false, "locked");
+          return;
+        }
+        const data = await res.json();
+        currentConfig = data;
+
+        $("metaTag").textContent =
+          data.meta && data.meta.runtimeConfigPath ? data.meta.runtimeConfigPath : "ready";
+
+        $("upstreamBaseUrl").value = data.upstreamBaseUrl || "";
+        $("upstreamApiKey").value = "";
+        $("upstreamApiKeyHint").textContent = data.upstreamApiKeyHint || "";
+
+        $("localApiKeys").value = (data.localApiKeys || []).join("\n");
+        $("adminApiKeys").value = (data.adminApiKeys || []).join("\n");
+
+        $("allowedModels").value = (data.allowedModels || []).join("\n");
+        $("requestTimeoutMs").value = String(data.requestTimeoutMs || "");
+
+        const locks = (data.meta && data.meta.envLocks) || {};
+        setLockHint($("lockUpstreamBaseUrl"), !!locks.upstreamBaseUrl, "UPSTREAM_BASE_URL");
+        setLockHint($("lockUpstreamApiKey"), !!locks.upstreamApiKey, "UPSTREAM_API_KEY");
+        setLockHint($("lockLocalApiKeys"), !!locks.localApiKeys, "LOCAL_API_KEYS");
+        setLockHint($("lockAdminApiKeys"), !!locks.adminApiKeys, "ADMIN_API_KEYS");
+        setLockHint($("lockAllowedModels"), !!locks.allowedModels, "ALLOWED_MODELS");
+        setLockHint($("lockRequestTimeoutMs"), !!locks.requestTimeoutMs, "REQUEST_TIMEOUT_MS");
+
+        const ok = !!data.configured;
+        setCfgState(ok, ok ? "configured" : "not configured");
+        $("saveStatus").textContent = "ok";
+      }
+
+      async function saveConfig({ clearUpstreamKey } = {}) {
+        saveSession();
+        $("saveStatus").textContent = "saving…";
+
+        const payload = {
+          upstreamBaseUrl: $("upstreamBaseUrl").value.trim(),
+          localApiKeys: parseLinesOrCsv($("localApiKeys").value),
+          adminApiKeys: parseLinesOrCsv($("adminApiKeys").value),
+          allowedModels: parseLinesOrCsv($("allowedModels").value),
+          requestTimeoutMs: parseInt($("requestTimeoutMs").value.trim() || "60000", 10)
+        };
+
+        const keyInput = $("upstreamApiKey").value;
+        if (clearUpstreamKey || keyInput === "-") {
+          payload.upstreamApiKey = "";
+        } else if (keyInput && keyInput.trim()) {
+          payload.upstreamApiKey = keyInput.trim();
+        }
+
+        const res = await fetch("/admin/config", {
+          method: "PUT",
+          headers: {
+            ...adminHeaders(),
+            "content-type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const text = await res.text();
+        if (!res.ok) {
+          $("saveStatus").textContent = `保存失败 HTTP ${res.status}: ${text}`;
+          setCfgState(false, "error");
+          return;
+        }
+        $("saveStatus").textContent = "已保存并生效";
+        await loadConfig();
+      }
+
+      async function testOnce() {
+        saveSession();
+        setTestState(false, "running");
+        $("testOutput").textContent = "sending…";
+
+        const model = ($("testModel").value || "").trim();
+        const prompt = $("testPrompt").value || "";
+
+        const body = {
+          model,
+          max_tokens: 64,
+          messages: [
+            {
+              role: "user",
+              content: [{ type: "text", text: prompt }]
+            }
+          ]
+        };
+
+        const res = await fetch("/v1/messages", {
+          method: "POST",
+          headers: {
+            ...localHeaders(),
+            "content-type": "application/json"
+          },
+          body: JSON.stringify(body)
+        });
+
+        const txt = await res.text();
+        if (!res.ok) {
+          setTestState(false, `HTTP ${res.status}`);
+          $("testOutput").textContent = txt;
+          return;
+        }
+        setTestState(true, "ok");
+        try {
+          $("testOutput").textContent = JSON.stringify(JSON.parse(txt), null, 2);
+        } catch {
+          $("testOutput").textContent = txt;
+        }
+      }
+
+      function maskHint(hint) {
+        if (!hint) return "unknown";
+        if (String(hint).startsWith("set")) return hint;
+        return "empty";
+      }
+
+      function buildAiPrompt() {
+        const c = currentConfig;
+        const models = (c && Array.isArray(c.allowedModels)) ? c.allowedModels : [];
+        const upstream = c && c.upstreamBaseUrl ? c.upstreamBaseUrl : "(not set)";
+        const upstreamKey = c ? maskHint(c.upstreamApiKeyHint) : "unknown";
+        const configured = c && c.configured ? "yes" : "no";
+
+        return [
+          "你是我的本地网关调试助手。请根据以下信息，帮我排查/扩展/生成对接示例。",
+          "",
+          "## 网关基本信息",
+          `- 项目: MyRouter (Local LLM Gateway)
+- Base URL: ${baseOrigin}
+- 对外协议: Anthropic Messages API
+- 关键接口: POST ${baseOrigin}/v1/messages
+- 模型列表: GET ${baseOrigin}/v1/models
+- 配置状态: configured=${configured}
+- 上游: ${upstream}
+- 上游 key: ${upstreamKey} (已打码，不提供明文)",
+          "",
+          "## 我希望 AI 帮我做的事",
+          "- 生成一段最小可用的 PowerShell/Node/Python 调用示例，调用 /v1/messages",
+          "- 如果我描述报错，请解释可能原因并给出定位步骤",
+          "- 如果我要接入 Claude Code/第三方工具，请给出它应当填写的 base url / key / model",
+          "",
+          "## 可用模型（白名单）",
+          models.length ? models.map((m) => `- ${m}`).join("\n") : "- (unknown)",
+          "",
+          "## 请求示例（Anthropic Messages API）",
+          "```json\n{\n  \"model\": \"claude-sonnet-4-5-20250929-thinking\",\n  \"max_tokens\": 128,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [{ \"type\": \"text\", \"text\": \"say ok\" }]\n    }\n  ]\n}\n```",
+          "",
+          "注意：不要让我把任何 secret（上游 key）贴出来。"
+        ].join("\n");
+      }
+
+      async function copyText(text) {
+        try {
+          await navigator.clipboard.writeText(text);
+          return true;
+        } catch {
+          try {
+            const ta = $("aiPrompt");
+            ta.focus();
+            ta.select();
+            document.execCommand("copy");
+            return true;
+          } catch {
+            return false;
+          }
+        }
+      }
+
+      function switchTab(tabId) {
+        const buttons = document.querySelectorAll(".nav button");
+        buttons.forEach((b) => b.classList.toggle("active", b.dataset.tab === tabId));
+        ["config", "test", "docs", "copy"].forEach((t) => {
+          const pane = document.getElementById(`pane-${t}`);
+          if (pane) pane.classList.toggle("active", t === tabId);
+        });
+      }
+
+      document.querySelectorAll(".nav button").forEach((btn) => {
+        btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+      });
+
+      $("btnLoad").addEventListener("click", () => loadConfig().catch((e) => ($("saveStatus").textContent = String(e))));
+      $("btnSave").addEventListener("click", () => saveConfig().catch((e) => ($("saveStatus").textContent = String(e))));
+      $("btnClearKey").addEventListener("click", () => saveConfig({ clearUpstreamKey: true }).catch((e) => ($("saveStatus").textContent = String(e))));
+      $("btnTest").addEventListener("click", () => testOnce().catch((e) => { setTestState(false, "error"); $("testOutput").textContent = String(e); }));
+
+      $("btnGenPrompt").addEventListener("click", async () => {
+        if (!currentConfig) {
+          await loadConfig().catch(() => {});
+        }
+        $("aiPrompt").value = buildAiPrompt();
+        $("copyStatus").textContent = "已生成";
+      });
+
+      $("btnCopyPrompt").addEventListener("click", async () => {
+        const txt = $("aiPrompt").value || "";
+        if (!txt.trim()) {
+          $("copyStatus").textContent = "没有内容可复制（先点“生成内容”）";
+          return;
+        }
+        const ok = await copyText(txt);
+        $("copyStatus").textContent = ok ? "已复制到剪贴板" : "复制失败（浏览器权限限制）";
+      });
+
+      loadSession();
+      loadConfig().catch((e) => ($("saveStatus").textContent = String(e)));
+    </script>
+  </body>
+</html>

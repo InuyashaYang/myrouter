@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MyRouter Docs</title>
+    <style>
+      :root {
+        --bg0: #f5f2ea;
+        --bg1: #efe9dd;
+        --paper: rgba(255, 255, 255, 0.76);
+        --ink: #1e1a14;
+        --muted: rgba(30, 26, 20, 0.72);
+        --line: rgba(30, 26, 20, 0.14);
+        --accent: #0a6b5c;
+        --accent2: #b24a2b;
+        --shadow: 0 10px 35px rgba(10, 10, 10, 0.12);
+        --radius: 16px;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background:
+          radial-gradient(900px 600px at 12% 12%, rgba(10, 107, 92, 0.13), transparent 60%),
+          radial-gradient(900px 600px at 85% 18%, rgba(178, 74, 43, 0.12), transparent 62%),
+          linear-gradient(180deg, var(--bg0), var(--bg1));
+        font-family: "Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+        line-height: 1.55;
+      }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      code, pre { font-family: "Cascadia Mono", "Consolas", monospace; }
+      .wrap {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 28px 16px 60px;
+      }
+      header {
+        display: grid;
+        gap: 10px;
+        margin: 6px 0 16px;
+      }
+      h1 { margin: 0; font-size: 28px; letter-spacing: 0.2px; }
+      .sub { color: var(--muted); font-size: 13px; }
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .pills { display: flex; gap: 10px; flex-wrap: wrap; }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.55);
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 260px 1fr;
+        gap: 14px;
+      }
+      @media (max-width: 980px) {
+        .grid { grid-template-columns: 1fr; }
+      }
+      .card {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        animation: rise 320ms ease-out both;
+      }
+      @keyframes rise {
+        from { transform: translateY(8px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      .card .hd {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+      .card .hd h2 {
+        margin: 0;
+        font-size: 14px;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-weight: 800;
+      }
+      .card .bd { padding: 16px; }
+      .toc a {
+        display: block;
+        padding: 8px 10px;
+        border-radius: 12px;
+      }
+      .toc a:hover { background: rgba(10, 107, 92, 0.06); text-decoration: none; }
+      h3 { margin: 18px 0 8px; font-size: 18px; }
+      h4 { margin: 14px 0 8px; font-size: 14px; color: rgba(30, 26, 20, 0.86); }
+      p { margin: 8px 0; }
+      ul { margin: 8px 0 8px 18px; padding: 0; }
+      li { margin: 6px 0; }
+      pre {
+        margin: 10px 0;
+        padding: 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(30, 26, 20, 0.14);
+        background: rgba(255, 255, 255, 0.58);
+        overflow: auto;
+      }
+      .note {
+        padding: 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(10, 107, 92, 0.22);
+        background: rgba(10, 107, 92, 0.06);
+        color: rgba(30, 26, 20, 0.9);
+      }
+      .warn {
+        padding: 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(178, 74, 43, 0.26);
+        background: rgba(178, 74, 43, 0.06);
+        color: rgba(30, 26, 20, 0.9);
+      }
+      .kbd {
+        font-family: "Cascadia Mono", "Consolas", monospace;
+        font-size: 12px;
+        padding: 2px 6px;
+        border-radius: 8px;
+        border: 1px solid rgba(30, 26, 20, 0.18);
+        background: rgba(255, 255, 255, 0.55);
+      }
+      .footer {
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="topbar">
+          <div>
+            <h1>MyRouter 超详细文档</h1>
+            <div class="sub">本地网关 / 转发站：对外提供 Anthropic Messages API，对上游转发到 OpenAI ChatCompletions 形态的第三方站。</div>
+          </div>
+          <div class="pills">
+            <div class="pill"><span class="kbd">/admin</span> 管理台</div>
+            <div class="pill"><span class="kbd">/v1/messages</span> Anthropic</div>
+            <div class="pill"><span class="kbd">config.runtime.json</span> 热更新</div>
+          </div>
+        </div>
+      </header>
+
+      <div class="grid">
+        <aside class="card">
+          <div class="hd"><h2>目录</h2></div>
+          <div class="bd toc">
+            <a href="#overview">1. 你得到什么</a>
+            <a href="#quickstart">2. 一键启动 (双击)</a>
+            <a href="#admin">3. 管理台 /admin</a>
+            <a href="#config">4. 配置来源与优先级</a>
+            <a href="#auth">5. 鉴权模型 (local/admin)</a>
+            <a href="#endpoints">6. API 列表</a>
+            <a href="#anthropic">7. Anthropic /v1/messages 兼容范围</a>
+            <a href="#models">8. 模型组白名单</a>
+            <a href="#tools">9. Tools / Tool result 映射</a>
+            <a href="#stream">10. 流式 (SSE) 说明</a>
+            <a href="#claudecode">11. Claude Code 接入建议</a>
+            <a href="#troubleshooting">12. 常见问题排查</a>
+            <a href="#security">13. 安全建议</a>
+          </div>
+        </aside>
+
+        <main class="card">
+          <div class="hd"><h2>文档</h2><div class="pill" id="basePill">Base: loading…</div></div>
+          <div class="bd">
+            <section id="overview">
+              <h3>1. 你得到什么</h3>
+              <p>MyRouter 是一个本地运行的“LLM 协议适配网关”。你的第三方上游站是 OpenAI ChatCompletions 形态；但你希望不同客户端工具（尤其 Claude Code）用它们习惯的协议访问。</p>
+              <ul>
+                <li>对外：提供 <b>Anthropic Messages API</b>：<span class="kbd">POST /v1/messages</span></li>
+                <li>对内：转发到上游：<span class="kbd">POST {UPSTREAM}/v1/chat/completions</span></li>
+                <li>模型：按“组白名单”限制模型名称，防止乱填导致越权或请求失败</li>
+                <li>管理：内置 <span class="kbd">/admin</span> 页面，在线修改上游 URL、Key、本地 key、模型列表等，并立即生效</li>
+              </ul>
+
+              <div class="note">
+                典型使用方式：把工具的“API Base URL”指向本机，例如 <span class="kbd">http://127.0.0.1:8787</span>，然后它就像对接 Anthropic 一样工作，但实际请求会被网关转发到你的第三方站。
+              </div>
+            </section>
+
+            <section id="quickstart">
+              <h3>2. 一键启动 (双击)</h3>
+              <ol>
+                <li>双击项目根目录的 <span class="kbd">MyRouter.cmd</span></li>
+                <li>它会自动安装依赖 (首次)、后台启动服务、并打开两页：<span class="kbd">/admin</span> + <span class="kbd">/docs</span></li>
+                <li>在 <span class="kbd">/admin</span> 填写上游 URL 与上游 key（以及本地 key），保存即可</li>
+              </ol>
+              <p>停止服务：</p>
+              <pre><code>powershell -NoProfile -ExecutionPolicy Bypass -File scripts\stop.ps1</code></pre>
+
+              <div class="warn">
+                日志在根目录：<span class="kbd">gateway.out.log</span> / <span class="kbd">gateway.err.log</span>。如果双击无反应，先看 err log。
+              </div>
+            </section>
+
+            <section id="admin">
+              <h3>3. 管理台 /admin</h3>
+              <p>访问：<span class="kbd">http://127.0.0.1:8787/admin</span>（端口可能自动调整，双击启动器会自动打开正确地址）。</p>
+              <h4>管理台能做什么</h4>
+              <ul>
+                <li>修改上游：<b>Upstream Base URL</b>（例如 <span class="kbd">http://152.53.52.170:3003</span>）</li>
+                <li>修改上游 Key：<b>Upstream API Key</b>（不会在页面回显，只显示 set/empty）</li>
+                <li>设置本地访问 key：<b>Local API Keys</b>（用于业务接口 <span class="kbd">/v1/messages</span> 的鉴权）</li>
+                <li>设置管理台 key：<b>Admin API Keys</b>（用于保护 <span class="kbd">/admin/*</span>）</li>
+                <li>编辑允许模型：<b>Allowed Models</b>（一行一个；留空时使用默认 Claude 组）</li>
+                <li>一键测试：调用 <span class="kbd">/v1/messages</span> 发一次 non-stream 请求</li>
+              </ul>
+              <h4>配置保存在哪里</h4>
+              <p>保存在根目录的 <span class="kbd">config.runtime.json</span>（可手动编辑，但推荐通过管理台写入）。</p>
+            </section>
+
+            <section id="config">
+              <h3>4. 配置来源与优先级</h3>
+              <p>MyRouter 有 3 级配置来源（从高到低）：</p>
+              <ol>
+                <li><b>环境变量</b>（最高优先级，锁定字段）：例如 <span class="kbd">UPSTREAM_API_KEY</span></li>
+                <li><b>运行时配置文件</b>：<span class="kbd">config.runtime.json</span>（管理台修改的内容）</li>
+                <li><b>默认值</b>：例如默认模型组、默认超时 60s</li>
+              </ol>
+              <p>当某个字段被环境变量提供时，管理台会提示“被环境变量覆盖”，页面修改不会生效。</p>
+              <h4>常用环境变量</h4>
+              <pre><code>LISTEN_HOST=127.0.0.1
+LISTEN_PORT=8787
+
+UPSTREAM_BASE_URL=http://152.53.52.170:3003
+UPSTREAM_API_KEY=sk-...
+
+LOCAL_API_KEYS=local-key-1,local-key-2
+ADMIN_API_KEYS=admin-key-1,admin-key-2
+
+ALLOWED_MODELS=claude-sonnet-4-5-20250929,claude-sonnet-4-5-20250929-thinking
+REQUEST_TIMEOUT_MS=60000</code></pre>
+            </section>
+
+            <section id="auth">
+              <h3>5. 鉴权模型 (local/admin)</h3>
+              <h4>Local API key（业务接口鉴权）</h4>
+              <ul>
+                <li>影响接口：<span class="kbd">/v1/messages</span>、<span class="kbd">/v1/models</span></li>
+                <li>请求头：<span class="kbd">x-api-key: &lt;key&gt;</span> 或 <span class="kbd">Authorization: Bearer &lt;key&gt;</span></li>
+                <li>如果 <span class="kbd">LOCAL_API_KEYS</span> / 配置文件里未设置任何 key，则不启用鉴权（不推荐）</li>
+              </ul>
+
+              <h4>Admin key（管理台鉴权）</h4>
+              <ul>
+                <li>影响接口：<span class="kbd">/admin</span>、<span class="kbd">/admin/config</span></li>
+                <li>请求头：<span class="kbd">x-admin-key: &lt;key&gt;</span> 或 <span class="kbd">Authorization: Bearer &lt;key&gt;</span></li>
+                <li>如果未配置任何 admin key：仅当服务监听在 <span class="kbd">127.0.0.1</span> 且访问来自 loopback 时，允许进入管理台完成初始化</li>
+              </ul>
+            </section>
+
+            <section id="endpoints">
+              <h3>6. API 列表</h3>
+              <ul>
+                <li><span class="kbd">GET /healthz</span>：健康检查</li>
+                <li><span class="kbd">GET /v1/models</span>：返回允许的模型列表（按白名单）</li>
+                <li><span class="kbd">POST /v1/messages</span>：Anthropic Messages API（核心）</li>
+                <li><span class="kbd">GET /admin</span>：内置管理台</li>
+                <li><span class="kbd">GET /admin/config</span>：读取生效配置（key 打码）</li>
+                <li><span class="kbd">PUT /admin/config</span>：更新配置并落盘</li>
+                <li><span class="kbd">GET /docs</span>：本文档</li>
+              </ul>
+            </section>
+
+            <section id="anthropic">
+              <h3>7. Anthropic /v1/messages 兼容范围</h3>
+              <p>当前实现聚焦 Claude Code / 常见工具可用的核心子集：</p>
+              <ul>
+                <li><b>messages</b>：支持 user/assistant 的文本内容（string 或 block array）</li>
+                <li><b>system</b>：支持 string 或 block array，会合并为 OpenAI 的 system message</li>
+                <li><b>max_tokens</b>：透传到上游</li>
+                <li><b>temperature/top_p/stop_sequences</b>：尽可能映射/透传</li>
+                <li><b>stream</b>：支持，将上游 OpenAI SSE 转为 Anthropic event-stream</li>
+              </ul>
+              <p>上游返回会被转换为 Anthropic message shape：</p>
+              <ul>
+                <li><span class="kbd">content</span>：至少包含一个 text block（为空也会给空字符串 block）</li>
+                <li><span class="kbd">usage</span>：non-stream 下会从上游 usage 映射；stream 下目前 usage 可能为 0（后续可增强为累计）</li>
+              </ul>
+            </section>
+
+            <section id="models">
+              <h3>8. 模型组白名单</h3>
+              <p>你提供的 Claude Code 分组模型已内置为默认白名单；你也可以在管理台里手动覆盖。</p>
+              <ul>
+                <li>请求中的 <span class="kbd">model</span> 必须在白名单内，否则返回 400</li>
+                <li>支持 thinking 后缀策略：当请求里出现 <span class="kbd">thinking: {type:"enabled"}</span> 且存在 <span class="kbd">-thinking</span> 变体，会自动切换</li>
+              </ul>
+            </section>
+
+            <section id="tools">
+              <h3>9. Tools / Tool result 映射</h3>
+              <p>该网关把 Anthropic 的 tool 语义映射到上游 OpenAI ChatCompletions 的 tools/tool_calls 语义：</p>
+              <ul>
+                <li><b>Anthropic tools</b>（name/input_schema） -&gt; <b>OpenAI tools</b>（type:function + JSON schema parameters）</li>
+                <li><b>assistant tool_use</b> block -&gt; <b>assistant tool_calls</b></li>
+                <li><b>user tool_result</b> block -&gt; <b>tool role message</b>（tool_call_id + content）</li>
+              </ul>
+              <div class="note">
+                tool_result 的 content 目前会被压成纯文本（字符串或 text blocks 拼接）。如果你的工具返回结构化 JSON，也可以把 JSON 字符串写进 tool_result 的 text。
+              </div>
+            </section>
+
+            <section id="stream">
+              <h3>10. 流式 (SSE) 说明</h3>
+              <p>当你请求 <span class="kbd">stream: true</span> 时：</p>
+              <ul>
+                <li>网关调用上游时会设置 <span class="kbd">stream: true</span></li>
+                <li>读取上游 OpenAI 风格的 <span class="kbd">data: {json}</span> SSE</li>
+                <li>实时转换为 Anthropic event-stream 事件：message_start/content_block_* / message_delta / message_stop</li>
+              </ul>
+              <div class="warn">
+                如果你的上游实际不支持流式，会导致 stream 模式无法工作；此时请先用 non-stream 验证联通。
+              </div>
+            </section>
+
+            <section id="claudecode">
+              <h3>11. Claude Code 接入建议</h3>
+              <p>不同版本 Claude Code 的配置项可能略有差异，但核心思路一致：</p>
+              <ul>
+                <li>把“Anthropic Base URL / API URL”指向本机：<span class="kbd">http://127.0.0.1:8787</span></li>
+                <li>把“Anthropic API Key”填为你在管理台设置的 local key（也就是 <span class="kbd">LOCAL_API_KEYS</span> 之一）</li>
+                <li>模型名填写白名单中的一个（例如 <span class="kbd">claude-sonnet-4-5-20250929-thinking</span>）</li>
+              </ul>
+              <p>如果 Claude Code 默认用的是 tools 能力，你需要选择在白名单中存在的模型，否则会被 400 拒绝。</p>
+            </section>
+
+            <section id="troubleshooting">
+              <h3>12. 常见问题排查</h3>
+              <h4>1) 双击后浏览器没打开</h4>
+              <ul>
+                <li>看 <span class="kbd">gateway.err.log</span> 是否有 PowerShell/Node 报错</li>
+                <li>确认已安装 Node.js（包含 npm）</li>
+              </ul>
+
+              <h4>2) /v1/messages 返回 503 not configured</h4>
+              <ul>
+                <li>打开 <span class="kbd">/admin</span> 填写上游 URL 与上游 Key，然后保存</li>
+                <li>或通过环境变量提供 <span class="kbd">UPSTREAM_BASE_URL</span> 和 <span class="kbd">UPSTREAM_API_KEY</span></li>
+              </ul>
+
+              <h4>3) 返回 upstream_error: 无效的令牌</h4>
+              <ul>
+                <li>说明上游 key 无效（你需要把第三方站发给你的真实 key 填进去）</li>
+              </ul>
+
+              <h4>4) 返回 401 Unauthorized</h4>
+              <ul>
+                <li>业务接口：检查 <span class="kbd">x-api-key</span> 是否正确</li>
+                <li>管理接口：检查 <span class="kbd">x-admin-key</span> 是否正确</li>
+              </ul>
+
+              <h4>5) 端口被占用</h4>
+              <ul>
+                <li>启动器会自动尝试 8788-8807</li>
+                <li>你也可以在环境变量设置 <span class="kbd">LISTEN_PORT</span></li>
+              </ul>
+            </section>
+
+            <section id="security">
+              <h3>13. 安全建议</h3>
+              <ul>
+                <li>强烈建议只监听 <span class="kbd">127.0.0.1</span>，不要直接暴露到公网</li>
+                <li>务必设置 <b>Local API Keys</b>，否则任何本机进程都能调用你的上游 key</li>
+                <li>设置 <b>Admin API Keys</b>，避免配置被随意改动</li>
+                <li>不要把 <span class="kbd">config.runtime.json</span> 提交到仓库</li>
+              </ul>
+              <div class="footer">文档页不包含任何 secret；上游 key 只会在管理台显示为 set/empty，不回显。</div>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        const base = window.location.origin;
+        const el = document.getElementById("basePill");
+        el.textContent = "Base: " + base;
+      })();
+    </script>
+  </body>
+</html>
