@@ -73,6 +73,8 @@ export async function pipeOpenAIStreamToAnthropic({
 
     if (Array.isArray(delta.tool_calls)) {
       ensureMessageStart();
+      // Some clients are sensitive to content block ordering; ensure index 0 exists.
+      ensureTextBlockStart();
       for (const tc of delta.tool_calls) {
         if (!tc || typeof tc.index !== "number") continue;
         const toolIndex = tc.index;
@@ -81,40 +83,46 @@ export async function pipeOpenAIStreamToAnthropic({
         const prev = toolStates.get(toolIndex) || {
           started: false,
           id: "",
-          name: ""
+          name: "",
+          argsBuf: ""
         };
 
         const id = tc.id || prev.id || randomId("toolu");
         const name =
           (tc.function && tc.function.name) || prev.name || "";
 
+        const argChunk =
+          tc.function && typeof tc.function.arguments === "string"
+            ? tc.function.arguments
+            : "";
+
         if (!prev.started) {
-          toolStates.set(toolIndex, { started: true, id, name });
+          toolStates.set(toolIndex, { started: true, id, name, argsBuf: prev.argsBuf + argChunk });
           writeEvent(replyRaw, "content_block_start", {
             type: "content_block_start",
             index: eventIndex,
             content_block: { type: "tool_use", id, name, input: {} }
           });
         } else {
-          toolStates.set(toolIndex, { started: true, id, name });
-        }
-
-        const argChunk =
-          tc.function && typeof tc.function.arguments === "string"
-            ? tc.function.arguments
-            : "";
-        if (argChunk) {
-          writeEvent(replyRaw, "content_block_delta", {
-            type: "content_block_delta",
-            index: eventIndex,
-            delta: { type: "input_json_delta", partial_json: argChunk }
-          });
+          toolStates.set(toolIndex, { started: true, id, name, argsBuf: prev.argsBuf + argChunk });
         }
       }
     }
   }
 
   ensureMessageStart();
+
+  // Flush tool arguments as a single complete JSON blob per tool.
+  // This avoids clients trying to JSON.parse partial fragments and losing required fields.
+  for (const [toolIndex, st] of toolStates) {
+    const eventIndex = 1 + toolIndex;
+    const partialJson = (st && typeof st.argsBuf === "string" && st.argsBuf.trim()) ? st.argsBuf : "{}";
+    writeEvent(replyRaw, "content_block_delta", {
+      type: "content_block_delta",
+      index: eventIndex,
+      delta: { type: "input_json_delta", partial_json: partialJson }
+    });
+  }
 
   if (sentTextStart) {
     writeEvent(replyRaw, "content_block_stop", {
