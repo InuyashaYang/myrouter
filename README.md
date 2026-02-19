@@ -146,6 +146,55 @@ Invoke-RestMethod -Method Post `
   -Body $body
 ```
 
+## 14. Codex / Responses 接入（MyRouter）
+
+为了兼容新版 Codex CLI（优先走 `/v1/responses`），MyRouter 现支持两种路由模式：
+
+- `responses_passthrough`：`POST /v1/responses` 直通上游 `POST /v1/responses`（推荐）
+- `responses_via_chat_adapter`：把 Responses 请求适配成 ChatCompletions 再转发（仅兜底）
+
+### 推荐配置（优先）
+
+当上游已支持 `/v1/responses` 时，使用直通模式。
+
+- 本地入口：`http://127.0.0.1:8787/v1/responses`
+- 本地鉴权：`Authorization: Bearer <LOCAL_API_KEY>` 或 `x-api-key: <LOCAL_API_KEY>`
+- 上游入口（网关内部）：`{UPSTREAM_BASE_URL}/v1/responses`
+
+### Codex 客户端如何填写
+
+在 Codex / OpenAI 兼容客户端中：
+
+- Base URL：`http://127.0.0.1:8787/v1`
+- API Key：`<LOCAL_API_KEY>`（不是上游 key）
+- Model：需在 `Allowed Models` 白名单内（例如 `gpt-5.2-codex`）
+
+### 请求形态说明
+
+Codex 常用的是 Responses API 形态（包含 `input`）：
+
+- `model`: 字符串
+- `input`: 消息数组（`type=message`，内容块常见 `type=input_text`）
+- `stream`: 建议开启 `true`
+- `tools`: 可选，函数工具定义
+
+### 排查要点（重点）
+
+若出现 `field messages is required`，通常表示请求被错误转发到 chat 形态且 `messages` 为空。请检查：
+
+- 请求路径是否误走了 `/v1/chat/completions`
+- 运行进程是否为最新版本（避免旧进程“版本漂移”）
+- 调试日志中的：
+  - `upstream.request.url`
+  - `routeMode`
+  - `mappedMessageCount`（仅 adapter 模式）
+
+### 建议的运维策略
+
+- 默认使用 `responses_passthrough`
+- 仅在上游异常时临时切 `responses_via_chat_adapter`
+- 保留调试字段一段时间，便于快速定位路由/映射问题
+
 ## Open Source
 
 MIT licensed. See `LICENSE`.
