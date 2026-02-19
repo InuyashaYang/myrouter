@@ -58,6 +58,8 @@ function mergeEffective(fileConfig, envOverrides) {
     disableStreaming: pickFirst(envOverrides.disableStreaming, fileConfig.disableStreaming, defaults.disableStreaming)
   };
 
+  merged.keys = Array.isArray(fileConfig.keys) ? fileConfig.keys : null;
+
   // Ignore profile-based config in legacy mode.
 
   merged.upstreamBaseUrl = (typeof merged.upstreamBaseUrl === "string" ? merged.upstreamBaseUrl : "").replace(/\/$/, "");
@@ -92,6 +94,9 @@ function applyUpdate(prev, patch) {
   if (Object.prototype.hasOwnProperty.call(patch, "disableStreaming")) {
     next.disableStreaming = !!patch.disableStreaming;
   }
+  if (Object.prototype.hasOwnProperty.call(patch, "keys")) {
+    next.keys = Array.isArray(patch.keys) ? patch.keys : [];
+  }
 
   return next;
 }
@@ -104,6 +109,19 @@ function normalizeRawConfig(value) {
   delete out.apiKeys;
   delete out.profiles;
   delete out.defaultProfile;
+
+  if (!Array.isArray(out.keys)) out.keys = [];
+  out.keys = out.keys
+    .filter((k) => k && typeof k === "object")
+    .map((k) => ({
+      key: typeof k.key === "string" ? k.key : "",
+      name: typeof k.name === "string" ? k.name : "",
+      wrapper: typeof k.wrapper === "string" ? k.wrapper : "anthropic",
+      allowedEndpoints: Array.isArray(k.allowedEndpoints) ? k.allowedEndpoints : [],
+      allowedModels: normalizeStringArray(k.allowedModels),
+      disableStreaming: !!k.disableStreaming
+    }))
+    .filter((k) => k.key);
 
   // Legacy fields
   if (typeof out.upstreamBaseUrl !== "string") out.upstreamBaseUrl = "";
