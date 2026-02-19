@@ -4,7 +4,38 @@ export async function callUpstreamChatCompletions({
   body,
   timeoutMs
 }) {
-  const url = `${upstreamBaseUrl}/v1/chat/completions`;
+  return callUpstreamPath({
+    upstreamBaseUrl,
+    upstreamApiKey,
+    path: "/v1/chat/completions",
+    body,
+    timeoutMs
+  });
+}
+
+export async function callUpstreamResponses({
+  upstreamBaseUrl,
+  upstreamApiKey,
+  body,
+  timeoutMs
+}) {
+  return callUpstreamPath({
+    upstreamBaseUrl,
+    upstreamApiKey,
+    path: "/v1/responses",
+    body,
+    timeoutMs
+  });
+}
+
+async function callUpstreamPath({
+  upstreamBaseUrl,
+  upstreamApiKey,
+  path,
+  body,
+  timeoutMs
+}) {
+  const url = `${upstreamBaseUrl}${path}`;
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
   try {

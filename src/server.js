@@ -12,11 +12,15 @@ import {
   anthropicToUpstreamChatBody,
   upstreamToAnthropicMessage
 } from "./anthropic.js";
-import { callUpstreamChatCompletions } from "./upstream.js";
+import {
+  openAIResponsesToUpstreamChatBody,
+  upstreamChatToOpenAIResponse
+} from "./openai.js";
+import { callUpstreamChatCompletions, callUpstreamResponses } from "./upstream.js";
 import { pipeOpenAIStreamToAnthropic } from "./openai_stream_to_anthropic.js";
+import { pipeOpenAIStreamToResponses, pipeUpstreamSSE } from "./openai_stream_to_responses.js";
 import { writeAnthropicMessageAsSSE } from "./anthropic_message_to_sse.js";
 import { requestLogStore } from "./request_log.js";
-import { openAIResponsesToUpstreamChatBody, upstreamChatToOpenAIResponse } from "./openai.js";
 import {
   createRuntimeConfigManager,
   getRuntimeConfigPath
@@ -652,6 +656,275 @@ function isEndpointAllowed(policy, path, expectedWrapper) {
   if (!allowed.length) return true;
   return allowed.includes(path);
 }
+
+app.post("/v1/responses", async (req, reply) => {
+  const cfg = configManager.getEffective();
+  const policy = resolveKeyPolicyOrThrow({ config: cfg, headers: req.headers });
+  if (!isEndpointAllowed(policy, "/v1/responses", "openai")) {
+    reply.code(403).send({
+      type: "error",
+      error: { type: "forbidden", message: "Key is not allowed for /v1/responses" }
+    });
+    return;
+  }
+
+  if (policy.allowedModels && policy.allowedModels.length) {
+    cfg.allowedModels = policy.allowedModels;
+  }
+
+  const entry = requestLogStore.createEntry({
+    method: req.method,
+    path: req.url,
+    headers: req.headers,
+    body: req.body
+  });
+  const start = Date.now();
+
+  const upstreamBaseUrl = cfg.upstreamBaseUrl;
+  const upstreamApiKey = cfg.upstreamApiKey;
+  const requestTimeoutMs = cfg.requestTimeoutMs;
+  const disableStreaming = policy.disableStreaming || cfg.disableStreaming;
+
+  if (!(upstreamBaseUrl && upstreamApiKey)) {
+    reply.code(503).send({
+      type: "error",
+      error: { type: "invalid_request_error", message: "Gateway is not configured." }
+    });
+    requestLogStore.finalize(entry, { status: 503, durationMs: Date.now() - start, error: "not_configured" });
+    return;
+  }
+
+  const reqBody = req.body && typeof req.body === "object" ? req.body : {};
+  const resolvedModel = resolveModelOrThrow({
+    requestedModel: reqBody.model,
+    allowedModels: cfg.allowedModels,
+    thinking: reqBody.thinking
+  });
+
+  const upstreamBody = reqBody;
+  requestLogStore.updateMapped(entry, { ...upstreamBody, routeMode: "direct_responses" });
+
+  const upstreamCall = await callUpstreamResponses({
+    upstreamBaseUrl,
+    upstreamApiKey,
+    body: upstreamBody,
+    timeoutMs: requestTimeoutMs
+  });
+  const upstreamRes = upstreamCall.res;
+  requestLogStore.updateUpstreamRequest(entry, {
+    url: upstreamCall.url,
+    headers: upstreamCall.headers,
+    body: upstreamCall.body
+  });
+
+  if (!upstreamRes.ok) {
+    const text = await upstreamRes.text().catch(() => "");
+    const shouldFallback = upstreamRes.status === 404 ||
+      (text && text.includes("field messages is required"));
+
+    if (shouldFallback) {
+      const fallbackBody = openAIResponsesToUpstreamChatBody(reqBody, resolvedModel);
+      if (!fallbackBody.messages || fallbackBody.messages.length === 0) {
+        reply.code(400).send({
+          type: "error",
+          error: { type: "invalid_request_error", message: "could not derive messages from input" }
+        });
+        requestLogStore.finalize(entry, { status: 400, durationMs: Date.now() - start, error: "empty_messages" });
+        return;
+      }
+
+      requestLogStore.updateMapped(entry, {
+        ...fallbackBody,
+        routeMode: "fallback_chat_adapter",
+        mappedMessageCount: fallbackBody.messages.length
+      });
+
+      const fallbackCall = await callUpstreamChatCompletions({
+        upstreamBaseUrl,
+        upstreamApiKey,
+        body: fallbackBody,
+        timeoutMs: requestTimeoutMs
+      });
+      const fallbackRes = fallbackCall.res;
+      requestLogStore.updateUpstreamRequest(entry, {
+        url: fallbackCall.url,
+        headers: fallbackCall.headers,
+        body: fallbackCall.body
+      });
+
+      if (!fallbackRes.ok) {
+        const fallbackText = await fallbackRes.text().catch(() => "");
+        reply.code(fallbackRes.status);
+        reply.send({
+          type: "error",
+          error: {
+            type: "upstream_error",
+            message: fallbackText || `Upstream error: HTTP ${fallbackRes.status}`
+          }
+        });
+        requestLogStore.updateUpstreamResponse(entry, {
+          status: fallbackRes.status,
+          bodySnippet: fallbackText ? String(fallbackText).slice(0, 2048) : "",
+          usage: null,
+          finishReason: null
+        });
+        requestLogStore.finalize(entry, { status: fallbackRes.status, durationMs: Date.now() - start });
+        return;
+      }
+
+      if (reqBody.stream) {
+        reply.hijack();
+
+        let cancelled = false;
+        const safeCancel = () => {
+          if (cancelled) return;
+          cancelled = true;
+          try {
+            if (fallbackRes.body && !fallbackRes.body.locked && typeof fallbackRes.body.cancel === "function") {
+              fallbackRes.body.cancel();
+            }
+          } catch {
+            // ignore
+          }
+        };
+        reply.raw.on("close", safeCancel);
+        reply.raw.on("error", safeCancel);
+
+        await pipeOpenAIStreamToResponses({
+          upstreamResponse: fallbackRes,
+          replyRaw: reply.raw,
+          resolvedModel
+        });
+
+        requestLogStore.updateUpstreamResponse(entry, {
+          status: fallbackRes.status,
+          bodySnippet: "[stream]",
+          usage: null,
+          finishReason: null
+        });
+        requestLogStore.finalize(entry, { status: 200, durationMs: Date.now() - start });
+        return;
+      }
+
+      const fallbackJson = await fallbackRes.json();
+      requestLogStore.updateUpstreamResponse(entry, {
+        status: fallbackRes.status,
+        bodySnippet: "[non_stream]",
+        usage: fallbackJson && fallbackJson.usage ? fallbackJson.usage : null,
+        finishReason: fallbackJson && fallbackJson.choices && fallbackJson.choices[0] ? fallbackJson.choices[0].finish_reason : null
+      });
+      reply.send(upstreamChatToOpenAIResponse(fallbackJson, resolvedModel));
+      requestLogStore.finalize(entry, { status: 200, durationMs: Date.now() - start });
+      return;
+    }
+
+    reply.code(upstreamRes.status).send({
+      type: "error",
+      error: {
+        type: "upstream_error",
+        message: text || `Upstream error: HTTP ${upstreamRes.status}`
+      }
+    });
+    requestLogStore.updateUpstreamResponse(entry, {
+      status: upstreamRes.status,
+      bodySnippet: text ? String(text).slice(0, 2048) : "",
+      usage: null,
+      finishReason: null
+    });
+    requestLogStore.finalize(entry, { status: upstreamRes.status, durationMs: Date.now() - start });
+    return;
+  }
+
+  const wantStream = !!reqBody.stream;
+  if (wantStream && disableStreaming) {
+    const downgradedBody = { ...reqBody, stream: false };
+    const downgradedCall = await callUpstreamResponses({
+      upstreamBaseUrl,
+      upstreamApiKey,
+      body: downgradedBody,
+      timeoutMs: requestTimeoutMs
+    });
+    const downgradedRes = downgradedCall.res;
+    requestLogStore.updateUpstreamRequest(entry, {
+      url: downgradedCall.url,
+      headers: downgradedCall.headers,
+      body: downgradedCall.body
+    });
+    if (!downgradedRes.ok) {
+      const text = await downgradedRes.text().catch(() => "");
+      reply.code(downgradedRes.status);
+      reply.send({
+        type: "error",
+        error: {
+          type: "upstream_error",
+          message: text || `Upstream error: HTTP ${downgradedRes.status}`
+        }
+      });
+      requestLogStore.updateUpstreamResponse(entry, {
+        status: downgradedRes.status,
+        bodySnippet: text ? String(text).slice(0, 2048) : "",
+        usage: null,
+        finishReason: null
+      });
+      requestLogStore.finalize(entry, { status: downgradedRes.status, durationMs: Date.now() - start });
+      return;
+    }
+
+    const downgradedJson = await downgradedRes.json();
+    requestLogStore.updateUpstreamResponse(entry, {
+      status: downgradedRes.status,
+      bodySnippet: "[responses_downgrade]",
+      usage: downgradedJson && downgradedJson.usage ? downgradedJson.usage : null,
+      finishReason: null
+    });
+    reply.send(downgradedJson);
+    requestLogStore.finalize(entry, { status: 200, durationMs: Date.now() - start });
+    return;
+  }
+
+  if (reqBody.stream) {
+    reply.hijack();
+
+    let cancelled = false;
+    const safeCancel = () => {
+      if (cancelled) return;
+      cancelled = true;
+      try {
+        if (upstreamRes.body && !upstreamRes.body.locked && typeof upstreamRes.body.cancel === "function") {
+          upstreamRes.body.cancel();
+        }
+      } catch {
+        // ignore
+      }
+    };
+    reply.raw.on("close", safeCancel);
+    reply.raw.on("error", safeCancel);
+
+    await pipeUpstreamSSE({
+      upstreamResponse: upstreamRes,
+      replyRaw: reply.raw
+    });
+
+    requestLogStore.updateUpstreamResponse(entry, {
+      status: upstreamRes.status,
+      bodySnippet: "[stream]",
+      usage: null,
+      finishReason: null
+    });
+    requestLogStore.finalize(entry, { status: 200, durationMs: Date.now() - start });
+    return;
+  }
+
+  const upstreamJson = await upstreamRes.json();
+  requestLogStore.updateUpstreamResponse(entry, {
+    status: upstreamRes.status,
+    bodySnippet: "[non_stream]",
+    usage: upstreamJson && upstreamJson.usage ? upstreamJson.usage : null,
+    finishReason: null
+  });
+  reply.send(upstreamJson);
+  requestLogStore.finalize(entry, { status: 200, durationMs: Date.now() - start });
+});
 
 app.setErrorHandler((err, req, reply) => {
   const status = err.statusCode || 500;
