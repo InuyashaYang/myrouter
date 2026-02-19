@@ -8,16 +8,17 @@ export async function callUpstreamChatCompletions({
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    const headers = {
+      "content-type": "application/json",
+      authorization: `Bearer ${upstreamApiKey}`
+    };
     const res = await fetch(url, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${upstreamApiKey}`
-      },
+      headers,
       body: JSON.stringify(body),
       signal: controller.signal
     });
-    return res;
+    return { res, url, headers, body };
   } finally {
     clearTimeout(t);
   }

@@ -14,6 +14,7 @@ import {
 import { callUpstreamChatCompletions } from "./upstream.js";
 import { pipeOpenAIStreamToAnthropic } from "./openai_stream_to_anthropic.js";
 import { writeAnthropicMessageAsSSE } from "./anthropic_message_to_sse.js";
+import { requestLogStore } from "./request_log.js";
 import {
   createRuntimeConfigManager,
   getRuntimeConfigPath
@@ -74,6 +75,39 @@ app.get("/admin", async (req, reply) => {
   const html = await fs.readFile(htmlPath, "utf8");
   reply.header("content-type", "text/html; charset=utf-8");
   reply.send(html);
+});
+
+// Debug log endpoints (loopback only)
+app.get("/debug/requests", async (req, reply) => {
+  if (!isLoopbackAddress(req.ip)) {
+    reply.code(403).send({
+      type: "error",
+      error: { type: "forbidden", message: "Debug log is only available on loopback." }
+    });
+    return;
+  }
+  const limitRaw = parseInt(req.query && req.query.limit ? String(req.query.limit) : "", 10);
+  const limit = Number.isFinite(limitRaw) ? limitRaw : undefined;
+  reply.send({ items: requestLogStore.list(limit) });
+});
+
+app.get("/debug/requests/:id", async (req, reply) => {
+  if (!isLoopbackAddress(req.ip)) {
+    reply.code(403).send({
+      type: "error",
+      error: { type: "forbidden", message: "Debug log is only available on loopback." }
+    });
+    return;
+  }
+  const item = requestLogStore.getById(req.params.id);
+  if (!item) {
+    reply.code(404).send({
+      type: "error",
+      error: { type: "not_found", message: "Log item not found" }
+    });
+    return;
+  }
+  reply.send(item);
 });
 
 // Unauthenticated local config API: loopback only.
@@ -142,7 +176,15 @@ app.put("/admin/config", async (req, reply) => {
 app.get("/v1/models", async (req, reply) => {
   const cfg = configManager.getEffective();
   enforceLocalAuthOrThrow(cfg, req.headers);
+  const entry = requestLogStore.createEntry({
+    method: req.method,
+    path: req.url,
+    headers: req.headers,
+    body: null
+  });
+  const start = Date.now();
   reply.send(buildModelsResponse(cfg.allowedModels));
+  requestLogStore.finalize(entry, { status: 200, durationMs: Date.now() - start });
 });
 
 app.post("/v1/messages", async (req, reply) => {
@@ -152,6 +194,14 @@ app.post("/v1/messages", async (req, reply) => {
   const requestTimeoutMs = cfg.requestTimeoutMs;
   const disableStreaming = !!cfg.disableStreaming;
 
+  const entry = requestLogStore.createEntry({
+    method: req.method,
+    path: req.url,
+    headers: req.headers,
+    body: req.body
+  });
+  const start = Date.now();
+
   if (!(upstreamBaseUrl && upstreamApiKey)) {
     reply.code(503).send({
       type: "error",
@@ -160,6 +210,7 @@ app.post("/v1/messages", async (req, reply) => {
         message: "Gateway is not configured. Set upstreamBaseUrl/upstreamApiKey in config.runtime.json."
       }
     });
+    requestLogStore.finalize(entry, { status: 503, durationMs: Date.now() - start, error: "not_configured" });
     return;
   }
 
@@ -174,12 +225,19 @@ app.post("/v1/messages", async (req, reply) => {
   });
 
   const upstreamBody = anthropicToUpstreamChatBody(reqBody, resolvedModel);
+  requestLogStore.updateMapped(entry, upstreamBody);
 
-  const upstreamRes = await callUpstreamChatCompletions({
+  const upstreamCall = await callUpstreamChatCompletions({
     upstreamBaseUrl,
     upstreamApiKey,
     body: upstreamBody,
     timeoutMs: requestTimeoutMs
+  });
+  const upstreamRes = upstreamCall.res;
+  requestLogStore.updateUpstreamRequest(entry, {
+    url: upstreamCall.url,
+    headers: upstreamCall.headers,
+    body: upstreamCall.body
   });
 
   if (!upstreamRes.ok) {
@@ -192,6 +250,13 @@ app.post("/v1/messages", async (req, reply) => {
         message: text || `Upstream error: HTTP ${upstreamRes.status}`
       }
     });
+    requestLogStore.updateUpstreamResponse(entry, {
+      status: upstreamRes.status,
+      bodySnippet: text ? String(text).slice(0, 2048) : "",
+      usage: null,
+      finishReason: null
+    });
+    requestLogStore.finalize(entry, { status: upstreamRes.status, durationMs: Date.now() - start });
     return;
   }
 
@@ -200,11 +265,17 @@ app.post("/v1/messages", async (req, reply) => {
     // around a non-stream upstream response.
     const downgradedBody = { ...reqBody, stream: false };
     const downgradedUpstreamBody = anthropicToUpstreamChatBody(downgradedBody, resolvedModel);
-    const downgradedRes = await callUpstreamChatCompletions({
+    const downgradedCall = await callUpstreamChatCompletions({
       upstreamBaseUrl,
       upstreamApiKey,
       body: downgradedUpstreamBody,
       timeoutMs: requestTimeoutMs
+    });
+    const downgradedRes = downgradedCall.res;
+    requestLogStore.updateUpstreamRequest(entry, {
+      url: downgradedCall.url,
+      headers: downgradedCall.headers,
+      body: downgradedCall.body
     });
     if (!downgradedRes.ok) {
       const text = await downgradedRes.text().catch(() => "");
@@ -216,6 +287,13 @@ app.post("/v1/messages", async (req, reply) => {
           message: text || `Upstream error: HTTP ${downgradedRes.status}`
         }
       });
+      requestLogStore.updateUpstreamResponse(entry, {
+        status: downgradedRes.status,
+        bodySnippet: text ? String(text).slice(0, 2048) : "",
+        usage: null,
+        finishReason: null
+      });
+      requestLogStore.finalize(entry, { status: downgradedRes.status, durationMs: Date.now() - start });
       return;
     }
 
@@ -223,6 +301,13 @@ app.post("/v1/messages", async (req, reply) => {
     const msg = upstreamToAnthropicMessage(upstreamJson, resolvedModel);
     reply.hijack();
     await writeAnthropicMessageAsSSE({ replyRaw: reply.raw, message: msg });
+    requestLogStore.updateUpstreamResponse(entry, {
+      status: downgradedRes.status,
+      bodySnippet: "[stream_downgrade]",
+      usage: upstreamJson && upstreamJson.usage ? upstreamJson.usage : null,
+      finishReason: upstreamJson && upstreamJson.choices && upstreamJson.choices[0] ? upstreamJson.choices[0].finish_reason : null
+    });
+    requestLogStore.finalize(entry, { status: 200, durationMs: Date.now() - start });
     return;
   }
 
@@ -250,11 +335,25 @@ app.post("/v1/messages", async (req, reply) => {
       replyRaw: reply.raw,
       resolvedModel
     });
+    requestLogStore.updateUpstreamResponse(entry, {
+      status: upstreamRes.status,
+      bodySnippet: "[stream]",
+      usage: null,
+      finishReason: null
+    });
+    requestLogStore.finalize(entry, { status: 200, durationMs: Date.now() - start });
     return;
   }
 
   const upstreamJson = await upstreamRes.json();
+  requestLogStore.updateUpstreamResponse(entry, {
+    status: upstreamRes.status,
+    bodySnippet: "[non_stream]",
+    usage: upstreamJson && upstreamJson.usage ? upstreamJson.usage : null,
+    finishReason: upstreamJson && upstreamJson.choices && upstreamJson.choices[0] ? upstreamJson.choices[0].finish_reason : null
+  });
   reply.send(upstreamToAnthropicMessage(upstreamJson, resolvedModel));
+  requestLogStore.finalize(entry, { status: 200, durationMs: Date.now() - start });
 });
 
 app.setErrorHandler((err, req, reply) => {
