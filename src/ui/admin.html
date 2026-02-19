@@ -877,11 +877,31 @@
 
       // Keys UI
       let keysData = [];
+      const DEFAULTS_BY_WRAPPER = {
+        anthropic: {
+          allowedEndpoints: ["/v1/messages", "/v1/models"],
+          allowedModels: []
+        },
+        openai: {
+          allowedEndpoints: ["/v1/responses", "/v1/chat/completions", "/v1/models"],
+          allowedModels: []
+        }
+      };
+
+      function genKey() {
+        const bytes = new Uint8Array(16);
+        if (window.crypto && window.crypto.getRandomValues) {
+          window.crypto.getRandomValues(bytes);
+        } else {
+          for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+        }
+        return "sk-local-" + Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+      }
 
       function buildKeyRow(k, idx) {
         const wrap = document.createElement("div");
         wrap.style.display = "grid";
-        wrap.style.gridTemplateColumns = "1.2fr 1fr 1fr 1fr 1fr";
+        wrap.style.gridTemplateColumns = "1fr 1fr 1fr 1fr 1fr";
         wrap.style.gap = "8px";
 
         const name = document.createElement("input");
@@ -890,9 +910,15 @@
         name.value = k.name || "";
 
         const key = document.createElement("input");
-        key.type = "text";
-        key.placeholder = "key";
+        key.type = "password";
+        key.placeholder = k.keyHint ? `key (${k.keyHint})` : "paste key";
         key.value = k.key || "";
+        key.addEventListener("focus", () => {
+          key.type = "text";
+        });
+        key.addEventListener("blur", () => {
+          key.type = "password";
+        });
 
         const wrapper = document.createElement("select");
         wrapper.innerHTML = `
@@ -957,8 +983,14 @@
           return;
         }
         const data = await res.json();
-        // UI expects full key list; if server doesn't expose keys, fallback to empty
-        keysData = Array.isArray(data.keys) ? data.keys : [];
+        keysData = Array.isArray(data.keys) ? data.keys.map((k) => ({
+          name: k.name || "",
+          key: "",
+          keyHint: k.keyHint || "",
+          wrapper: k.wrapper || "anthropic",
+          allowedEndpoints: Array.isArray(k.allowedEndpoints) ? k.allowedEndpoints : [],
+          allowedModels: Array.isArray(k.allowedModels) ? k.allowedModels : []
+        })) : [];
         $("keysStatus").textContent = `ok (${keysData.length})`;
         renderKeysEditor();
       }
@@ -981,7 +1013,14 @@
       }
 
       $("btnKeysAdd").addEventListener("click", () => {
-        keysData.push({ name: "", key: "", wrapper: "anthropic", allowedEndpoints: [], allowedModels: [] });
+        const preset = DEFAULTS_BY_WRAPPER.anthropic;
+        keysData.push({
+          name: "",
+          key: genKey(),
+          wrapper: "anthropic",
+          allowedEndpoints: preset.allowedEndpoints.slice(),
+          allowedModels: preset.allowedModels.slice()
+        });
         renderKeysEditor();
       });
 
@@ -1005,3 +1044,10 @@
     </script>
   </body>
 </html>
+        wrapper.addEventListener("change", () => {
+          const preset = DEFAULTS_BY_WRAPPER[wrapper.value];
+          if (preset) {
+            endpoints.value = preset.allowedEndpoints.join(",");
+            models.value = preset.allowedModels.join(",");
+          }
+        });

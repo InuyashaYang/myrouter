@@ -130,7 +130,16 @@ app.get("/admin/config", async (req, reply) => {
     configured: cfg.configured,
 
     // key policies
-    keys: Array.isArray(cfg.keys) ? cfg.keys : [],
+    keys: Array.isArray(cfg.keys)
+      ? cfg.keys.map((k) => ({
+          name: k.name || "",
+          keyHint: k.key ? `set (${String(k.key).length} chars)` : "empty",
+          wrapper: k.wrapper || "anthropic",
+          allowedEndpoints: Array.isArray(k.allowedEndpoints) ? k.allowedEndpoints : [],
+          allowedModels: Array.isArray(k.allowedModels) ? k.allowedModels : [],
+          disableStreaming: !!k.disableStreaming
+        }))
+      : [],
     // legacy view
     upstreamBaseUrl: cfg.upstreamBaseUrl,
     upstreamApiKeyHint: cfg.upstreamApiKey ? `set (${cfg.upstreamApiKey.length} chars)` : "empty",
