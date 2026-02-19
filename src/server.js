@@ -335,139 +335,6 @@ app.post("/v1/chat/completions", async (req, reply) => {
   requestLogStore.finalize(entry, { status: 200, durationMs: Date.now() - start });
 });
 
-app.post("/v1/responses", async (req, reply) => {
-  const cfg = configManager.getEffective();
-  const policy = resolveKeyPolicyOrThrow({ config: cfg, headers: req.headers });
-  if (!isEndpointAllowed(policy, "/v1/responses", "openai")) {
-    reply.code(403).send({
-      type: "error",
-      error: { type: "forbidden", message: "Key is not allowed for /v1/responses" }
-    });
-    return;
-  }
-
-  if (policy.allowedModels && policy.allowedModels.length) {
-    cfg.allowedModels = policy.allowedModels;
-  }
-
-  const entry = requestLogStore.createEntry({
-    method: req.method,
-    path: req.url,
-    headers: req.headers,
-    body: req.body
-  });
-  const start = Date.now();
-
-  const upstreamBaseUrl = cfg.upstreamBaseUrl;
-  const upstreamApiKey = cfg.upstreamApiKey;
-  const requestTimeoutMs = cfg.requestTimeoutMs;
-  const disableStreaming = policy.disableStreaming || cfg.disableStreaming;
-
-  if (!(upstreamBaseUrl && upstreamApiKey)) {
-    reply.code(503).send({
-      type: "error",
-      error: { type: "invalid_request_error", message: "Gateway is not configured." }
-    });
-    requestLogStore.finalize(entry, { status: 503, durationMs: Date.now() - start, error: "not_configured" });
-    return;
-  }
-
-  const reqBody = req.body && typeof req.body === "object" ? req.body : {};
-  const resolvedModel = resolveModelOrThrow({
-    requestedModel: reqBody.model,
-    allowedModels: cfg.allowedModels,
-    thinking: reqBody.thinking
-  });
-
-  const upstreamBody = openAIResponsesToUpstreamChatBody(reqBody, resolvedModel);
-  requestLogStore.updateMapped(entry, upstreamBody);
-
-  const wantStream = !!reqBody.stream;
-  if (wantStream && disableStreaming) {
-    const upstreamCall = await callUpstreamChatCompletions({
-      upstreamBaseUrl,
-      upstreamApiKey,
-      body: { ...upstreamBody, stream: false },
-      timeoutMs: requestTimeoutMs
-    });
-    const upstreamRes = upstreamCall.res;
-    requestLogStore.updateUpstreamRequest(entry, {
-      url: upstreamCall.url,
-      headers: upstreamCall.headers,
-      body: upstreamCall.body
-    });
-    const upstreamJson = await upstreamRes.json();
-    const response = upstreamChatToOpenAIResponse(upstreamJson, resolvedModel);
-    requestLogStore.updateUpstreamResponse(entry, {
-      status: upstreamRes.status,
-      bodySnippet: "[responses_downgrade]",
-      usage: upstreamJson.usage || null,
-      finishReason: upstreamJson.choices && upstreamJson.choices[0] ? upstreamJson.choices[0].finish_reason : null
-    });
-    reply.send(response);
-    requestLogStore.finalize(entry, { status: 200, durationMs: Date.now() - start });
-    return;
-  }
-
-  const upstreamCall = await callUpstreamChatCompletions({
-    upstreamBaseUrl,
-    upstreamApiKey,
-    body: upstreamBody,
-    timeoutMs: requestTimeoutMs
-  });
-  const upstreamRes = upstreamCall.res;
-  requestLogStore.updateUpstreamRequest(entry, {
-    url: upstreamCall.url,
-    headers: upstreamCall.headers,
-    body: upstreamCall.body
-  });
-
-  if (!upstreamRes.ok) {
-    const text = await upstreamRes.text().catch(() => "");
-    reply.code(upstreamRes.status).send({
-      type: "error",
-      error: { type: "upstream_error", message: text || `Upstream error: HTTP ${upstreamRes.status}` }
-    });
-    requestLogStore.updateUpstreamResponse(entry, {
-      status: upstreamRes.status,
-      bodySnippet: text ? String(text).slice(0, 2048) : "",
-      usage: null,
-      finishReason: null
-    });
-    requestLogStore.finalize(entry, { status: upstreamRes.status, durationMs: Date.now() - start });
-    return;
-  }
-
-  if (wantStream) {
-    // TODO: full Responses SSE. For now, proxy upstream stream.
-    reply.hijack();
-    reply.raw.setHeader("content-type", "text/event-stream; charset=utf-8");
-    reply.raw.setHeader("cache-control", "no-cache");
-    reply.raw.setHeader("connection", "keep-alive");
-    const { Readable } = await import("node:stream");
-    Readable.fromWeb(upstreamRes.body).pipe(reply.raw);
-    requestLogStore.updateUpstreamResponse(entry, {
-      status: upstreamRes.status,
-      bodySnippet: "[stream_proxy]",
-      usage: null,
-      finishReason: null
-    });
-    requestLogStore.finalize(entry, { status: 200, durationMs: Date.now() - start });
-    return;
-  }
-
-  const upstreamJson = await upstreamRes.json();
-  const response = upstreamChatToOpenAIResponse(upstreamJson, resolvedModel);
-  requestLogStore.updateUpstreamResponse(entry, {
-    status: upstreamRes.status,
-    bodySnippet: "[responses]",
-    usage: upstreamJson.usage || null,
-    finishReason: upstreamJson.choices && upstreamJson.choices[0] ? upstreamJson.choices[0].finish_reason : null
-  });
-  reply.send(response);
-  requestLogStore.finalize(entry, { status: 200, durationMs: Date.now() - start });
-});
-
 app.post("/v1/messages", async (req, reply) => {
   const cfg = configManager.getEffective();
   const upstreamBaseUrl = cfg.upstreamBaseUrl;
@@ -659,18 +526,10 @@ function isEndpointAllowed(policy, path, expectedWrapper) {
 
 app.post("/v1/responses", async (req, reply) => {
   const cfg = configManager.getEffective();
-  const policy = resolveKeyPolicyOrThrow({ config: cfg, headers: req.headers });
-  if (!isEndpointAllowed(policy, "/v1/responses", "openai")) {
-    reply.code(403).send({
-      type: "error",
-      error: { type: "forbidden", message: "Key is not allowed for /v1/responses" }
-    });
-    return;
-  }
-
-  if (policy.allowedModels && policy.allowedModels.length) {
-    cfg.allowedModels = policy.allowedModels;
-  }
+  const upstreamBaseUrl = cfg.upstreamBaseUrl;
+  const upstreamApiKey = cfg.upstreamApiKey;
+  const requestTimeoutMs = cfg.requestTimeoutMs;
+  const disableStreaming = !!cfg.disableStreaming;
 
   const entry = requestLogStore.createEntry({
     method: req.method,
@@ -680,11 +539,6 @@ app.post("/v1/responses", async (req, reply) => {
   });
   const start = Date.now();
 
-  const upstreamBaseUrl = cfg.upstreamBaseUrl;
-  const upstreamApiKey = cfg.upstreamApiKey;
-  const requestTimeoutMs = cfg.requestTimeoutMs;
-  const disableStreaming = policy.disableStreaming || cfg.disableStreaming;
-
   if (!(upstreamBaseUrl && upstreamApiKey)) {
     reply.code(503).send({
       type: "error",
@@ -693,6 +547,8 @@ app.post("/v1/responses", async (req, reply) => {
     requestLogStore.finalize(entry, { status: 503, durationMs: Date.now() - start, error: "not_configured" });
     return;
   }
+
+  enforceLocalAuthOrThrow(cfg, req.headers);
 
   const reqBody = req.body && typeof req.body === "object" ? req.body : {};
   const resolvedModel = resolveModelOrThrow({
